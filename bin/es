@@ -29,16 +29,16 @@ include GLI
 PID     = ENV['PID']
 ES_NAME = ENV['ES_NAME']
 LOGIN   = ENV['LOGIN']
-PASS    = ENV['PASS']
+PASS    = ENV['PASSWORD']
 program_desc 'Describe your application here'
 
 version Es::VERSION
 
-# desc 'Config'
-# default_value nil
-# flag [:c,:config]
+desc 'Print the descriptor in the ugly oneliner mode for use in legacy tools'
+default_value nil
+switch [:d,:descriptor]
 
-GoodData.logger = Logger.new(STDOUT)
+# GoodData.logger = Logger.new(STDOUT)
 
 desc 'Creates ES'
 command :create do |c|
