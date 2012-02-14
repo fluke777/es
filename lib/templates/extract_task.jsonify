@@ -1,0 +1,13 @@
+json.readTask do
+  json.entity params[:entity]
+  json.timeFrames(params[:frames]) do |frame|
+    json.startDate frame[:start_date]
+    json.endDate frame[:end_date]
+    json.interval 1
+    json.dayWithinPeriod frame[:day_within_period] || "LAST"
+    json.intervalUnit frame[:interval_unit] || "day"
+  end
+  json.readMap params[:task]
+  json.timezone params[:timezone] || 'UTC'
+  json.computedStreams '[{"type":"computed","ops":[]}]'
+end

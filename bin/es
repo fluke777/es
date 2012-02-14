@@ -1,0 +1,254 @@
+#!/usr/bin/env ruby
+# 1.9 adds realpath to resolve symlinks; 1.8 doesn't
+# have this method, so we add it so we get resolved symlinks
+# and compatibility
+unless File.respond_to? :realpath
+  class File #:nodoc:
+    def self.realpath path
+      return realpath(File.readlink(path)) if symlink?(path)
+      path
+    end
+  end
+end
+$: << File.expand_path(File.dirname(File.realpath(__FILE__)) + '/../lib')
+require 'rubygems'
+require 'bundler/setup'
+require 'gli'
+# require 'es_version'
+require 'gooddata'
+require 'pp'
+require 'logger'
+require 'lib/es'
+require 'ostruct'
+require 'jsonify'
+require 'date'
+require 'chronic'
+
+include GLI
+
+ENV['PID'] = 'pid'
+ENV['ES_NAME'] = 'ES_name'
+ENV['GD_LOGIN'] = 'login'
+ENV['GD_PASS'] = 'pass'
+program_desc 'Describe your application here'
+
+version Es::VERSION
+
+# desc 'Config'
+# default_value nil
+# flag [:c,:config]
+
+# GoodData.logger = Logger.new(STDOUT)
+
+desc 'Creates ES'
+command :create do |c|
+  c.action do |global_options,options,args|
+    pid = ENV['PID']
+    estore_id = ENV['ES_NAME']
+    begin
+      GoodData.post "/gdc/projects/#{pid}/eventStore/stores", {:store => {:storeId => estore_id}}
+    rescue RestClient::BadRequest
+      puts "Seems like eventstore with name #{estore_id} already exists"
+      exit 1
+    end
+  end
+end
+
+desc 'Delete ES'
+command :delete do |c|
+  c.action do |global_options,options,args|
+    pid = ENV['PID']
+    GoodData.delete "/gdc/projects/#{pid}/eventStore/stores/#{ENV['ES_NAME']}"
+  end
+end
+
+desc 'Load data'
+command :load do |c|
+  c.action do |global_options,options,args|
+
+    fail "Provide path to the loading configuration as a first argument" if args.first.nil?
+    config_file = args.first
+
+    pid = ENV['PID']
+    es_name = ENV['ES_NAME']
+
+    # params = JSON.parse(File.read("/Users/fluke/Documents/example_config.json"), :symbolize_names => true)
+    entities = Es::Helpers.parse_load_config(config_file)
+    # pp entities
+    
+    entities.each do |f|
+      source = f.file
+      filename = File.basename(f.file)
+      base =  File.basename(f.file, '.*')
+      dir = "#{f.name}-#{DateTime.now.strftime("%Y-%M-%d_%H:%M:%S")}"
+      destination = "/uploads/#{dir}/#{filename}"
+      puts "Will load from #{f.file}"
+      puts "Will load to #{destination}"
+      # puts source
+      
+      f.file = destination
+      task = Es::generate('load', f)
+      GoodData.connection.upload source, dir
+      data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/uploadTasks", task
+      link = data["asyncTask"]["link"]["poll"]
+      response = GoodData.get(link, :process => false)
+      while response.code != 204
+        sleep 10
+        response = GoodData.get(link, :process => false)
+      end
+      puts "Done #{source}"
+    end
+  end
+end
+
+
+desc 'Load Deleted Records'
+command :load_deleted do |c|
+  c.action do |global_options,options,args|
+
+    fail "Provide path to the loading configuration as a first argument" if args.first.nil?
+    load_config_file = args.first
+
+    pid = ENV['PID']
+    es_name = ENV['ES_NAME']
+    entities = Es::Helpers.parse_load_config(load_config_file)
+    entities.each do |f|
+
+      source = f.file
+      source_dir = File.dirname(source)
+      filename = File.basename(source)
+      base =  File.basename(source, '.*')
+      ext = File.extname(source)
+      deleted_filename = "#{base}-deleted#{ext}"
+      deleted_source = "#{source_dir}/#{base}-deleted#{ext}"
+      destination_dir = "#{f.name}-deleted-#{DateTime.now.strftime("%Y-%M-%d_%H:%M:%S")}"
+      destination = "/uploads/#{destination_dir}/#{deleted_filename}"
+      puts "Will load from #{deleted_source}"
+      puts "Will load to #{destination}"
+      GoodData.connection.upload deleted_source, destination_dir
+      f.file = destination
+      task = Es::generate('deleted_records', f)
+      data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/uploadTasks", task
+      link = data["asyncTask"]["link"]["poll"]
+      response = GoodData.get(link, :process => false)
+      while response.code != 204
+        sleep 10
+        response = GoodData.get(link, :process => false)
+      end
+      puts "Done #{source}"
+      # puts task
+    end
+  end
+end
+
+desc 'Extract'
+command :extract do |c|
+  c.action do |global_options,options,args|
+    
+    fail "Provide path to the loading configuration as a first argument" if args.first.nil?
+    load_config_file = args.first
+    fail "Provide path to the extract configuration as a second argument" if args[1].nil?
+    extract_config_file = args[1]
+    
+    pid = ENV['PID']
+    es_name = ENV['ES_NAME']
+    
+    entities = Es::Helpers.parse_load_config(load_config_file)
+    extract_params = params = JSON.parse(File.read(extract_config_file), :symbolize_names => true)
+    # each entity in extract
+    global_timeframe = extract_params[:timeframes]
+    extract_params[:entities].each do |extract_param|
+      e = entities.find {|e| e.name == extract_param[:entity]}
+      fail "There is not entity #{extract_param[:entity]} in the eventstore, only #{entities.map {|e| e.name}.join(", ")}" if e.nil?
+      puts e.name
+      pp extract_param[:fields]
+
+      fields = extract_param[:fields].map do |f|
+        if f == "snapshot" then
+          Es::SnapshotField.new("snapshot", "snapshot")
+        elsif f == "autoincrement"
+          Es::AutoincrementField.new("generate", "autoincrement")
+        elsif f.respond_to?(:keys) && f.keys.first == :hid
+          Es::HIDField.new('hid', "historicid", {
+            :entity => f[:hid][:from_entity],
+            :fields => f[:hid][:from_fields],
+            :through => f[:hid][:connected_through]
+          })
+        else
+          field_in_config = e.find_field_by_name(f)
+          fail "The field #{f} in output is neither in config not snapshot, autoincrement or ...." if field_in_config.nil?
+          field_in_config
+        end
+      end
+
+      params = {}
+      params[:file] = "#{e.name}#{rand(1000000)}.csv"
+      params[:fields] = fields
+      task = Es::generate('extract_map', params, true)
+      puts task
+      
+      params = {}
+      params[:entity] = e.name
+      
+      params[:frames] = if extract_param[:timeframes].nil?
+        [{
+            :start_date         => Chronic.parse(global_timeframe[:from]).strftime('%Y-%m-%d') || Chronic.parse('yesterday').strftime('%Y-%m-%d'),
+            :end_date           => Chronic.parse(global_timeframe[:to]).strftime('%Y-%m-%d') || Chronic.parse('today').strftime('%Y-%m-%d'),
+            :day_within_period  => global_timeframe[:day_within_period] || "LAST",
+            :interval           => global_timeframe[:interval] || 1,
+            :interval_unit      => global_timeframe[:interval] || "day"
+          }
+        ]
+      else
+        timeframes = extract_param[:timeframes].is_a?(Hash) ? [extract_param[:timeframes]] :extract_param[:timeframes]
+        timeframes.map do |t|
+          {
+            :start_date => Chronic.parse(t[:from]).strftime('%Y-%m-%d'),
+            :end_date   => Chronic.parse(t[:to]).strftime('%Y-%m-%d'),
+            :day_within_period => t[:day_within_period],
+            :interval_unit => t[:interval_unit]
+          }
+        end
+      end
+      
+      params[:task] = "[#{task}]"
+      # pp params
+      
+      wrapped_task = Es::generate('extract_task', params)
+      puts wrapped_task
+      puts "Extracting to #{e.name}.csv"
+      begin
+        data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/readTasks", wrapped_task
+      rescue RestClient::BadRequest => e
+        pp e
+        exit 1
+      end
+    end
+  end
+end
+
+pre do |global,command,options,args|
+  # Pre logic here
+  # Return true to proceed; false to abourt and not call the
+  # chosen command
+  # Use skips_pre before a command to skip this block
+  # on that command only
+  GoodData.connect ENV['GD_LOGIN'], ENV['GD_PASS'], nil, 0
+  true
+end
+
+post do |global,command,options,args|
+  # Post logic here
+  # Use skips_post before a command to skip this
+  # block on that command only
+end
+
+on_error do |exception|
+  pp exception.backtrace
+  # Error logic here
+  # return false to skip default error handling
+  # false
+  true
+end
+
+exit GLI.run(ARGV)

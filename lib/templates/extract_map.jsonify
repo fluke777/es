@@ -1,0 +1,41 @@
+json.file params[:file]
+populates = params[:fields].find {|f| f.is_hid?} || params[:fields].find {|f| f.type == "recordid"}
+json.populates populates.name
+json.columns(params[:fields]) do |field|
+  json.name field.name
+  json.preferred field.name
+  json.definition do
+    if field.is_snapshot? then
+      json.type "snapshot"
+      json.data "date"
+    elsif field.is_autoincrement? then
+      json.type "generate"
+      json.data "autoincrement"
+    elsif field.is_hid? then
+      json.type "historicid"
+      json.ops([:recordid, :entity]) do |op|
+        if op == :recordid then
+          if field.through.nil?
+            json.type "recordid"
+          else
+            json.type "stream"
+            json.data field.through
+          end
+        else
+          json.type op
+          json.data field.entity
+          json.ops(field.fields) do |hid_field|
+            json.type "stream"
+            json.data hid_field
+          end
+        end
+      end
+    else
+      json.ops([field]) do |f|
+        json.type Es::Helpers.type_to_type(field.type)
+        json.data field.name
+      end
+      json.type Es::Helpers.type_to_operation(field.type)
+    end
+  end
+end

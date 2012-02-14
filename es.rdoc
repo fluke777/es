@@ -1,0 +1,5 @@
+= es
+
+Generate this with
+    es rdoc
+After you have described your command line interface

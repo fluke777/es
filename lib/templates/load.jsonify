@@ -1,0 +1,8 @@
+json.uploadTask do
+  json.entity params.name
+  json.file params.file
+  json.attributes(params.fields) do |field|
+    json.name field.name
+    json.type field.type
+  end
+end
