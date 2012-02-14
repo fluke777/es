@@ -21,7 +21,7 @@ bin/es
   s.add_development_dependency('rake')
   s.add_development_dependency('rdoc')
   s.add_dependency('gli')
-  s.add_dependency('gooddata')
+  s.add_dependency('gooddata', '>= 0.5.2')
   s.add_dependency('jsonify')
   s.add_dependency('chronic')
 end

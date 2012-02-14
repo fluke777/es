@@ -12,9 +12,9 @@ unless File.respond_to? :realpath
 end
 $: << File.expand_path(File.dirname(File.realpath(__FILE__)) + '/../lib')
 require 'rubygems'
-require 'bundler/setup'
+# require 'bundler/setup'
 require 'gli'
-# require 'es_version'
+require 'lib/es_version'
 require 'gooddata'
 require 'pp'
 require 'logger'
@@ -30,7 +30,8 @@ PID     = ENV['PID']
 ES_NAME = ENV['ES_NAME']
 LOGIN   = ENV['LOGIN']
 PASS    = ENV['PASSWORD']
-program_desc 'Describe your application here'
+
+program_desc 'ES generator - Should help you with working with Event Store'
 
 version Es::VERSION
 
@@ -38,7 +39,7 @@ desc 'Print the descriptor in the ugly oneliner mode for use in legacy tools'
 default_value nil
 switch [:d,:descriptor]
 
-# GoodData.logger = Logger.new(STDOUT)
+GoodData.logger = Logger.new(STDOUT)
 
 desc 'Creates ES'
 command :create do |c|
@@ -46,7 +47,7 @@ command :create do |c|
     begin
       GoodData.post "/gdc/projects/#{PID}/eventStore/stores", {:store => {:storeId => ES_NAME}}
     rescue RestClient::BadRequest
-      puts "Seems like eventstore with name #{estore_id} already exists"
+      puts "Seems like eventstore with name #{ES_NAME} already exists"
       exit 1
     end
   end
@@ -180,14 +181,25 @@ command :extract do |c|
       params[:entity] = e.name
       
       params[:frames] = if extract_param[:timeframes].nil?
-        [{
-            :start_date         => Chronic.parse(global_timeframe[:from]).strftime('%Y-%m-%d') || Chronic.parse('yesterday').strftime('%Y-%m-%d'),
-            :end_date           => Chronic.parse(global_timeframe[:to]).strftime('%Y-%m-%d') || Chronic.parse('today').strftime('%Y-%m-%d'),
-            :day_within_period  => global_timeframe[:day_within_period] || "LAST",
-            :interval           => global_timeframe[:interval] || 1,
-            :interval_unit      => global_timeframe[:interval] || "day"
-          }
-        ]
+        if global_timeframe
+          [{
+              :start_date         => Chronic.parse(global_timeframe[:from]).strftime('%Y-%m-%d'),
+              :end_date           => Chronic.parse(global_timeframe[:to]).strftime('%Y-%m-%d'),
+              :day_within_period  => global_timeframe[:day_within_period] || "LAST",
+              :interval           => global_timeframe[:interval] || 1,
+              :interval_unit      => global_timeframe[:interval] || "day"
+            }
+          ]
+        else
+          [{
+              :start_date         => Chronic.parse('yesterday').strftime('%Y-%m-%d'),
+              :end_date           => Chronic.parse('today').strftime('%Y-%m-%d'),
+              :day_within_period  => "LAST",
+              :interval           => 1,
+              :interval_unit      => "day"
+            }
+          ]
+        end
       else
         timeframes = extract_param[:timeframes].is_a?(Hash) ? [extract_param[:timeframes]] :extract_param[:timeframes]
         timeframes.map do |t|
@@ -229,7 +241,12 @@ pre do |global,command,options,args|
   # chosen command
   # Use skips_pre before a command to skip this block
   # on that command only
-  GoodData.connect LOGIN, PASS, nil, 0
+  begin
+    GoodData.connect LOGIN, PASS, nil, 0
+  rescue RestClient::BadRequest => e
+    puts "Login Failed"
+    exit 1
+  end
   true
 end
 
