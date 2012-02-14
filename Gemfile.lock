@@ -4,13 +4,13 @@ PATH
     es (0.0.1)
       chronic
       gli
-      gooddata
+      gooddata (>= 0.5.2)
       jsonify
 
 PATH
   remote: ../gooddata-ruby
   specs:
-    gooddata (0.5.1)
+    gooddata (0.5.2)
       fastercsv
       json
       json_pure
@@ -23,7 +23,7 @@ GEM
   specs:
     chronic (0.6.7)
     fastercsv (1.5.4)
-    gli (1.4.0)
+    gli (1.5.1)
     json (1.6.5)
     json_pure (1.6.5)
     jsonify (0.3.1)
