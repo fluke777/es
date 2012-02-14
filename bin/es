@@ -39,7 +39,7 @@ desc 'Print the descriptor in the ugly oneliner mode for use in legacy tools'
 default_value nil
 switch [:d,:descriptor]
 
-GoodData.logger = Logger.new(STDOUT)
+# GoodData.logger = Logger.new(STDOUT)
 
 desc 'Creates ES'
 command :create do |c|
