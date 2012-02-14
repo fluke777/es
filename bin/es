@@ -12,7 +12,7 @@ unless File.respond_to? :realpath
 end
 $: << File.expand_path(File.dirname(File.realpath(__FILE__)) + '/../lib')
 require 'rubygems'
-# require 'bundler/setup'
+require 'bundler/setup'
 require 'gli'
 require 'lib/es_version'
 require 'gooddata'
@@ -34,10 +34,6 @@ PASS    = ENV['PASSWORD']
 program_desc 'ES generator - Should help you with working with Event Store'
 
 version Es::VERSION
-
-desc 'Print the descriptor in the ugly oneliner mode for use in legacy tools'
-default_value nil
-switch [:d,:descriptor]
 
 # GoodData.logger = Logger.new(STDOUT)
 
@@ -135,7 +131,17 @@ command :load_deleted do |c|
 end
 
 desc 'Extract'
+
 command :extract do |c|
+  
+  c.desc 'Print the task in the ugly oneliner mode for use in legacy tools.'
+  c.default_value false
+  c.switch [:j, :json]
+  
+  c.desc 'Run as usual but output the task definition in pretty print for debugging.'
+  c.default_value true
+  c.switch [:d, :debug]
+  
   c.action do |global_options,options,args|
     
     fail "Provide path to the loading configuration as a first argument" if args.first.nil?
@@ -150,8 +156,6 @@ command :extract do |c|
     extract_params[:entities].each do |extract_param|
       e = entities.find {|e| e.name == extract_param[:entity]}
       fail "There is not entity #{extract_param[:entity]} in the eventstore, only #{entities.map {|e| e.name}.join(", ")}" if e.nil?
-      puts e.name
-      pp extract_param[:fields]
 
       fields = extract_param[:fields].map do |f|
         if f == "snapshot" then
@@ -174,9 +178,10 @@ command :extract do |c|
       params = {}
       params[:file] = "#{e.name}#{rand(1000000)}.csv"
       params[:fields] = fields
-      task = Es::generate('extract_map', params, true)
-      puts task
-      
+      debug_task = Es::generate('extract_map', params, true)
+      puts debug_task if options[:debug]
+      task = Es::generate('extract_map', params, false)
+      # puts task
       params = {}
       params[:entity] = e.name
       
@@ -215,8 +220,13 @@ command :extract do |c|
       params[:task] = "[#{task}]"
       # pp params
       
-      wrapped_task = Es::generate('extract_task', params)
-      puts wrapped_task
+      wrapped_task = Es::generate('extract_task', params, false)
+      if options[:json]
+        puts "============= DESCRIPTOR START ============="
+        puts wrapped_task
+        puts "============= DESCRIPTOR END ============="
+        exit
+      end
       puts "Extracting to #{e.name}.csv"
       begin
         data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/readTasks", wrapped_task
@@ -257,11 +267,16 @@ post do |global,command,options,args|
 end
 
 on_error do |exception|
-  pp exception.backtrace
+  if exception.is_a?(SystemExit) && exception.status == 0
+    false
+  else
+    true
+  end
+  # pp exception.backtrace
   # Error logic here
   # return false to skip default error handling
   # false
-  true
+  # true
 end
 
 exit GLI.run(ARGV)
