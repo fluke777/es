@@ -107,6 +107,8 @@ module Es
         "stream"
       when "fact"
         "stream"
+      when "timeAttribute"
+        "stream"
       when "snapshot"
         "snapshot"
       end
@@ -123,6 +125,8 @@ module Es
         "key"
       when "snapshot"
         "snapshot"
+      when "timeAttribute"
+        "date"
       end
     end
   end
