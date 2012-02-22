@@ -1,4 +1,5 @@
 # Ensure we require the local version and not one we might have installed already
+require 'rake'
 require File.join([File.dirname(__FILE__),'lib','es_version.rb'])
 spec = Gem::Specification.new do |s| 
   s.name = 'es'
@@ -9,9 +10,7 @@ spec = Gem::Specification.new do |s|
   s.platform = Gem::Platform::RUBY
   s.summary = 'A description of your project'
 # Add your other files here if you make them
-  s.files = %w(
-bin/es
-  )
+  s.files = ['bin/es'] + Dir['lib/**/*.*']
   s.require_paths << 'lib'
   s.has_rdoc = true
   s.extra_rdoc_files = ['README.rdoc','es.rdoc']
