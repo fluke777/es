@@ -4,6 +4,7 @@ require 'jsonify'
 require 'json'
 require 'rainbow'
 require 'kwalify'
+require 'active_support/time'
 
 module Es
 
@@ -12,6 +13,9 @@ module Es
 
   class IncorrectSpecificationError < RuntimeError
   end
+  
+  class UnableToMerge < RuntimeError
+  end
 
   class Timeframe
     INTERVAL_UNITS = [:day, :week, :month, :year]
@@ -19,20 +23,28 @@ module Es
     attr_accessor :to, :from, :interval_unit, :interval, :day_within_period
 
     def self.parse(spec)
-      Timeframe.new(spec)
+      if spec == 'latest' then
+        Timeframe.new({
+          :to => 'today',
+          :from => 'yesterday'
+        })
+      else
+        Timeframe.new(spec)
+      end
     end
 
     def initialize(spec)
       validate_spec(spec)
       @spec = spec
-      @to = spec[:to]
-      @from = spec[:from]
+      @to = Chronic.parse(spec[:to])
+      @from = spec[:from] ? Chronic.parse(spec[:from]) : to.advance(:days => -1)
       @interval_unit = spec[:interval_unit] || :day
       @interval = spec[:interval] || 1
       @day_within_period = spec[:day_within_period] || :last
     end
 
     def validate_spec(spec)
+      fail IncorrectSpecificationError.new("Timeframe should have a specification") if spec.nil?
       fail InsufficientSpecificationError.new("To key was not specified during the Timeframe creation") unless spec.has_key?(:to)
       fail InsufficientSpecificationError.new("From key was not specified during the Timeframe creation") unless spec.has_key?(:from)
       fail IncorrectSpecificationError.new("Interval key should be a number") if spec[:interval] && !spec[:interval].is_a?(Fixnum)
@@ -40,24 +52,26 @@ module Es
       fail IncorrectSpecificationError.new("Interval_unit key should be one of :day, :week, :month, :year") if spec[:day_within_period] && !DAY_WITHIN_PERIOD.include?(spec[:day_within_period])
     end
 
-    def to_json
-      Helpers::generate("timeframe", {
-        :to                 => Chronic.parse(to).strftime('%Y-%m-%d'),
-        :from               => Chronic.parse(from).strftime('%Y-%m-%d'),
-        :interval_unit      => interval_unit,
-        :day_within_period  => day_within_period.to_s.upcase,
+    def to_extract_fragment(pid, options = {})
+      {
+        :endDate            => to.strftime('%Y-%m-%d'),
+        :startDate          => from.strftime('%Y-%m-%d'),
+        :intervalUnit       => interval_unit,
+        :dayWithinPeriod    => day_within_period.to_s.upcase,
         :interval           => interval
-      })
+      }
     end
 
   end
 
   class Extract
 
-    attr_accessor :entities, :timezone
+    attr_accessor :entities, :timeframe, :timezone
 
     def self.parse(spec, a_load)
-      Extract.new(spec[:entities].map do |entity_spec|
+      global_timeframe = parse_timeframes(spec[:timeframes]) || parse_timeframes("latest")
+      
+      parsed_entities = spec[:entities].map do |entity_spec|
         entity_name = entity_spec[:entity]
         load_entity = a_load.get_merged_entity_for(entity_name)
         fields = entity_spec[:fields].map do |field|
@@ -73,26 +87,44 @@ module Es
               :fields => field[:hid][:from_fields],
               :through => field[:hid][:connected_through]
             })
+          else
+            fail InsufficientSpecificationError.new("The field #{field.to_s.bright} was not found in either the loading specification nor was recognized as a special column")
           end
         end
+        parsed_timeframe = parse_timeframes(entity_spec[:timeframes])
         Entity.new(entity_name, {
           :fields => fields,
-          :file   => "ssss"
+          :file   => entity_spec[:file],
+          :timeframe => parsed_timeframe || global_timeframe || (raise "Timeframe has to be defined")
         })
-      end)
+      end
+
+      Extract.new(parsed_entities)
     end
 
-    def initialize(entities)
+    def self.parse_timeframes(timeframe_spec)
+      return nil if timeframe_spec.nil?
+      return Timeframe.parse("latest") if timeframe_spec == "latest"
+      if timeframe_spec.is_a?(Array) then
+        timeframe_spec.map {|t_spec| Es::Timeframe.parse(t_spec)}
+      else
+        Es::Timeframe.parse(timeframe_spec)
+      end
+    end
+
+    def initialize(entities, options = {})
       @entities = entities
+      @timeframe = options[:timeframe]
+      @timezone = options[:timezone] || 'UTC'
     end
 
     def get_entity(name)
       entities.detect {|e| e.name == name}
     end
 
-    def to_extract_fragment(pretty = true)
+    def to_extract_fragment(pid, options = {})
       entities.map do |entity|
-        entity.extract_fragment(PID)
+        entity.to_extract_fragment(pid, options)
       end
     end
 
@@ -121,6 +153,7 @@ module Es
 
     def get_merged_entity_for(name)
       entities_to_merge = entities.find_all {|e| e.name == name}
+      fail UnableToMerge.new("There is no entity #{name.bright} in current load object.") if entities_to_merge.empty?
       merged_fields = entities_to_merge.inject([]) {|all, e| all.concat e.fields}
       Entity.new(name, {
         :file => "MERGED",
@@ -138,7 +171,7 @@ module Es
   end
 
   class Entity
-    attr_accessor :name, :fields, :file
+    attr_accessor :name, :fields, :file, :timeframes
 
     def self.parse(spec)
       begin
@@ -163,6 +196,11 @@ module Es
       @name = name
       @fields = options[:fields]
       @file = options[:file]
+      if options[:timeframe] && !options[:timeframe].is_a?(Array)
+        @timeframes = [options[:timeframe]]
+      else
+        @timeframes = options[:timeframe]
+      end
       raise Es::IncorrectSpecificationError.new("Entity #{name} should not contain multiple fields with the same name.") if has_multiple_same_fields?
     end
 
@@ -170,17 +208,21 @@ module Es
       fields.uniq_by {|s| s.name}.count != fields.count
     end
 
-    def extract_fragment(pid)
+    def to_extract_fragment(pid, options = {})
+      pretty = options[:pretty].nil? ? true : options[:pretty]
+      read_map = [{
+        :file       => Es::Helpers.load_destination_dir(pid, self) + '/' + Es::Helpers.load_destination_file(self),
+        :populates  => (fields.find {|f| f.is_hid?} || fields.find {|f| f.type == "recordid"}).name,
+        :columns    => (fields.map do |field|
+          field.to_extract_fragment(pid, options)
+        end)
+      }]
+      
       {
         :readTask => {
           :entity => name,
-          :timeFrames => "TIMEFRAME --- TBD",
-          :readMap => ({
-            :file       => file,
-            :populates  => (fields.find {|f| f.is_hid?} || fields.find {|f| f.type == "recordid"}).name,
-            :columns    => fields.map do |field|
-              field.to_extract_fragment
-            end}.to_json),
+          :timeFrames => (timeframes.map{|t| t.to_extract_fragment(pid, options)}),
+          :readMap => (pretty ? read_map : read_map.to_json),
           :timezone => 'UTC',
           :computedStreams => '[{"type":"computed","ops":[]}]'
         }
@@ -191,7 +233,7 @@ module Es
       {
         :uploadTask => {
           :entity       => name,
-          :file         => web_dav_file = Es::Helpers.load_destination_dir(pid, self) + '/' + Es::Helpers.load_destination_file(self),
+          :file         => Es::Helpers.load_destination_dir(pid, self) + '/' + Es::Helpers.load_destination_file(self),
           :attributes   => fields.map {|f| f.to_load_fragment(pid)}
         }
       }
@@ -242,13 +284,17 @@ module Es
       @type = type
     end
 
-    def to_extract_fragment
+    def to_extract_fragment(pid, options = {})
       {
-        :ops => {
-          :type => Es::Helpers.type_to_type(type),
-          :data => name
-        },
-        :type => Es::Helpers.type_to_operation(type)
+        :name => name,
+        :preferred => name,
+        :definition => {
+          :ops => [{
+            :type => Es::Helpers.type_to_type(type),
+            :data => name
+          }],
+          :type => Es::Helpers.type_to_operation(type)
+        }
       }
     end
 
@@ -273,10 +319,14 @@ module Es
       true
     end
 
-    def to_extract_fragment
+    def to_extract_fragment(pid, options = {})
       {
-        :type => "snapshot",
-        :data => "date"
+        :name => name,
+        :preferred => name,
+        :definition => {
+          :type => "snapshot",
+          :data => "date"
+        }
       }
     end
 
@@ -297,7 +347,7 @@ module Es
       @through = options[:through]
     end
 
-    def to_extract_fragment
+    def to_extract_fragment(pid, options = {})
       {
         :type => "historicid",
         :ops  => [
@@ -326,10 +376,14 @@ module Es
       true
     end
 
-    def to_extract_fragment
+    def to_extract_fragment(pid, options = {})
       {
-        :type => "generate",
-        :data => "autoincrement"
+        :name => name,
+        :preferred => name,
+        :definition => {
+          :type => "generate",
+          :data => "autoincrement"
+        }
       }
     end
   end

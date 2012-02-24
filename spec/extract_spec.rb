@@ -68,7 +68,38 @@ describe Es::Extract do
   it "is able to parse from json and grab the info from loading columns" do
     @extract.entities.count.should == 1
     @extract.get_entity("User").fields.count.should == 4
-    pp @extract.to_extract_fragment
+    pp @extract.to_extract_fragment('123')
+  end
+
+  it "is able to parse timeframe" do
+    t = Es::Extract.parse_timeframes({
+      :from  => "1 weeks ago",
+      :to    => "tomorrow"
+    })
+    t.should be_an_instance_of(Es::Timeframe)
+  end
+    
+  it "is able to parse timeframes or array of timeframes" do
+    t = Es::Extract.parse_timeframes(nil)
+    t.should == nil
+    
+    t = Es::Extract.parse_timeframes([
+      {
+        :from  => "1 weeks ago",
+        :to    => "tomorrow"
+      },
+      {
+        :from  => "3 weeks ago",
+        :to    => "1 weeks ago"
+      }
+    ])
+    t.should be_an_instance_of(Array)
+    t.count.should == 2
+  end
+
+  it "is able to parse latest timeframe" do
+    t = Es::Extract.parse_timeframes("latest")
+    t.should be_an_instance_of(Es::Timeframe)
   end
 
 end

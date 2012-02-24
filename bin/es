@@ -12,9 +12,9 @@ unless File.respond_to? :realpath
 end
 $: << File.expand_path(File.dirname(File.realpath(__FILE__)) + '/../lib')
 require 'rubygems'
-require 'bundler/setup'
+# require 'bundler/setup'
 require 'gli'
-# require 'lib/es_version'
+require 'lib/es_version'
 require 'gooddata'
 require 'pp'
 require 'logger'
@@ -57,7 +57,7 @@ end
 
 desc 'Load data'
 command :load do |c|
-  c.desc 'execute only for one entity.'
+  c.desc 'Execute only for one entity.'
   c.default_value false
   c.flag [:o, :only]
   
@@ -111,51 +111,55 @@ command :load do |c|
 end
 
 
-# desc 'Load Deleted Records'
-# command :load_deleted do |c|
-#   c.action do |global_options,options,args|
-# 
-#     fail "Provide path to the loading configuration as a first argument" if args.first.nil?
-#     fail "File #{args.fail} cannot be found" unless File.exist?(args.first)
-#     
-#     load_config_file = JSON.parse(File.read(args.first), :symbolize_names => true)
-# 
-# 
-# 
-# 
-#     # entities = Es::Helpers.parse_load_config(load_config_file)
-#     # entities.each do |f|
-#     # 
-#     #   source = f.file
-#     #   source_dir = File.dirname(source)
-#     #   filename = File.basename(source)
-#     #   base =  File.basename(source, '.*')
-#     #   ext = File.extname(source)
-#     #   deleted_filename = "#{base}-deleted#{ext}"
-#     #   deleted_source = "#{source_dir}/#{base}-deleted#{ext}"
-#     #   destination_dir = "#{f.name}-deleted-#{DateTime.now.strftime("%Y-%M-%d_%H:%M:%S")}"
-#     #   destination = "/uploads/#{destination_dir}/#{deleted_filename}"
-#     #   puts "Will load from #{deleted_source}"
-#     #   puts "Will load to #{destination}"
-#     #   GoodData.connection.upload deleted_source, destination_dir
-#     #   f.file = destination
-#     #   task = Es::generate('deleted_records', f)
-#     #   data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/uploadTasks", task
-#     #   link = data["asyncTask"]["link"]["poll"]
-#     #   response = GoodData.get(link, :process => false)
-#     #   while response.code != 204
-#     #     sleep 10
-#     #     response = GoodData.get(link, :process => false)
-#     #   end
-#     #   puts "Done #{source}"
-#     #   # puts task
-#     # end
-#   end
-# end
+desc 'Load Deleted Records'
+command :load_deleted do |c|
+  c.action do |global_options,options,args|
+
+    fail "Provide path to the loading configuration as a first argument" if args.first.nil?
+    fail "File #{args.fail} cannot be found" unless File.exist?(args.first)
+    
+    load_config_file = JSON.parse(File.read(args.first), :symbolize_names => true)
+    # entities = Es::Helpers.parse_load_config(load_config_file)
+    # entities.each do |f|
+    # 
+    #   source = f.file
+    #   source_dir = File.dirname(source)
+    #   filename = File.basename(source)
+    #   base =  File.basename(source, '.*')
+    #   ext = File.extname(source)
+    #   deleted_filename = "#{base}-deleted#{ext}"
+    #   deleted_source = "#{source_dir}/#{base}-deleted#{ext}"
+    #   destination_dir = "#{f.name}-deleted-#{DateTime.now.strftime("%Y-%M-%d_%H:%M:%S")}"
+    #   destination = "/uploads/#{destination_dir}/#{deleted_filename}"
+    #   puts "Will load from #{deleted_source}"
+    #   puts "Will load to #{destination}"
+    #   GoodData.connection.upload deleted_source, destination_dir
+    #   f.file = destination
+    #   task = Es::generate('deleted_records', f)
+    #   data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/uploadTasks", task
+    #   link = data["asyncTask"]["link"]["poll"]
+    #   response = GoodData.get(link, :process => false)
+    #   while response.code != 204
+    #     sleep 10
+    #     response = GoodData.get(link, :process => false)
+    #   end
+    #   puts "Done #{source}"
+    #   # puts task
+    # end
+  end
+end
 
 desc 'Extract'
 
 command :extract do |c|
+  
+  c.desc 'Execute only for one entity.'
+  c.default_value false
+  c.flag [:o, :only]
+  
+  c.desc 'Verbose mode'
+  c.default_value false
+  c.switch [:v, :verbose]
   
   c.desc 'Print the task in the ugly oneliner mode for use in legacy tools.'
   c.default_value false
@@ -178,101 +182,40 @@ command :extract do |c|
     extract_config = Es::Helpers.load_config(extract_config_file)
     extract = Es::Extract.parse(extract_config, load)
     
-    pp extract.to_extract_fragment
-    
-    # entities = Es::Helpers.parse_load_config(load_config_file)
-    # extract_params = params = JSON.parse(File.read(extract_config_file), :symbolize_names => true)
-    # # each entity in extract
-    # global_timeframe = extract_params[:timeframes]
-    # extract_params[:entities].each do |extract_param|
-    #   e = entities.find {|e| e.name == extract_param[:entity]}
-    #   fail "There is not entity #{extract_param[:entity]} in the eventstore, only #{entities.map {|e| e.name}.join(", ")}" if e.nil?
-    # 
-    #   fields = extract_param[:fields].map do |f|
-    #     if f == "snapshot" then
-    #       Es::SnapshotField.new("snapshot", "snapshot")
-    #     elsif f == "autoincrement"
-    #       Es::AutoincrementField.new("generate", "autoincrement")
-    #     elsif f.respond_to?(:keys) && f.keys.first == :hid
-    #       Es::HIDField.new('hid', "historicid", {
-    #         :entity => f[:hid][:from_entity],
-    #         :fields => f[:hid][:from_fields],
-    #         :through => f[:hid][:connected_through]
-    #       })
-    #     else
-    #       field_in_config = e.find_field_by_name(f)
-    #       fail "The field #{f} in output is neither in config not snapshot, autoincrement or ...." if field_in_config.nil?
-    #       field_in_config
-    #     end
-    #   end
-    # 
-    #   params = {}
-    #   params[:file] = "#{e.name}#{rand(1000000)}.csv"
-    #   params[:fields] = fields
-    #   debug_task = Es::generate('extract_map', params, true)
-    #   puts debug_task if options[:debug]
-    #   task = Es::generate('extract_map', params, false)
-    #   # puts task
-    #   params = {}
-    #   params[:entity] = e.name
-    #   
-    #   params[:frames] = if extract_param[:timeframes].nil?
-    #     if global_timeframe
-    #       [{
-    #           :start_date         => Chronic.parse(global_timeframe[:from]).strftime('%Y-%m-%d'),
-    #           :end_date           => Chronic.parse(global_timeframe[:to]).strftime('%Y-%m-%d'),
-    #           :day_within_period  => global_timeframe[:day_within_period] || "LAST",
-    #           :interval           => global_timeframe[:interval] || 1,
-    #           :interval_unit      => global_timeframe[:interval] || "day"
-    #         }
-    #       ]
-    #     else
-    #       [{
-    #           :start_date         => Chronic.parse('yesterday').strftime('%Y-%m-%d'),
-    #           :end_date           => Chronic.parse('today').strftime('%Y-%m-%d'),
-    #           :day_within_period  => "LAST",
-    #           :interval           => 1,
-    #           :interval_unit      => "day"
-    #         }
-    #       ]
-    #     end
-    #   else
-    #     timeframes = extract_param[:timeframes].is_a?(Hash) ? [extract_param[:timeframes]] :extract_param[:timeframes]
-    #     timeframes.map do |t|
-    #       {
-    #         :start_date => Chronic.parse(t[:from]).strftime('%Y-%m-%d'),
-    #         :end_date   => Chronic.parse(t[:to]).strftime('%Y-%m-%d'),
-    #         :day_within_period => t[:day_within_period],
-    #         :interval_unit => t[:interval_unit]
-    #       }
-    #     end
-    #   end
-    #   
-    #   params[:task] = "[#{task}]"
-    #   # pp params
-    #   
-    #   wrapped_task = Es::generate('extract_task', params, false)
-    #   if options[:json]
-    #     puts "============= DESCRIPTOR START ============="
-    #     puts wrapped_task
-    #     puts "============= DESCRIPTOR END ============="
-    #     exit
-    #   end
-    #   puts "Extracting to #{e.name}.csv"
-    #   begin
-    #     data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/readTasks", wrapped_task
-    #     link = data["asyncTask"]["link"]["poll"]
-    #     response = GoodData.get(link, :process => false)
-    #     while response.code != 204
-    #       sleep 10
-    #       response = GoodData.get(link, :process => false)
-    #     end
-    #     puts "Done"
-    #   rescue RestClient::BadRequest => e
-    #     pp e
-    #     exit 1
-    #   end
-    # end
+    extract.entities.each do |entity|
+      next if options[:only] && entity.name != options[:only]
+      # pp extract.to_extract_fragment(PID)
+
+      # web_dav_file = Es::Helpers.load_destination_dir(PID, entity) + '/' + Es::Helpers.load_destination_file(entity)
+      if options[:verbose]
+        puts "Entity #{entity.name.bright}"
+        puts JSON.pretty_generate(entity.to_extract_fragment(PID)) if options[:verbose]
+      end
+
+      if options[:j]
+        puts "Entity #{entity.name.bright}" if !options[:verbose]
+        # puts "load the file #{entity.file} to destination #{web_dav_file} and run the specified as the task"
+        puts "======= Extract JSON start"
+        puts entity.to_extract_fragment(PID, :pretty => false).to_json.color(:blue)
+        puts "======= Extract JSON end"
+        puts
+      else
+        begin
+          data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/readTasks", entity.to_extract_fragment(PID, :pretty => false).to_json
+        rescue RestClient::BadRequest => e
+          puts e.inspect
+          exit 1
+        end
+        link = data["asyncTask"]["link"]["poll"]
+        response = GoodData.get(link, :process => false)
+        while response.code != 204
+          sleep 10
+          response = GoodData.get(link, :process => false)
+        end
+        web_dav_file = Es::Helpers.load_destination_dir(PID, entity) + '/' + Es::Helpers.load_destination_file(entity)
+        GoodData.connection.download web_dav_file, entity.file
+      end
+    end
   end
 end
 

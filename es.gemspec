@@ -25,4 +25,6 @@ spec = Gem::Specification.new do |s|
   s.add_dependency('rainbow')
   s.add_dependency('kwalify')
   s.add_dependency('pry')
+  s.add_dependency('activesupport')
+  s.add_dependency('i18n')
 end
