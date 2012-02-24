@@ -1,5 +1,4 @@
 # Ensure we require the local version and not one we might have installed already
-require 'rake'
 require File.join([File.dirname(__FILE__),'lib','es_version.rb'])
 spec = Gem::Specification.new do |s| 
   s.name = 'es'
@@ -23,4 +22,7 @@ spec = Gem::Specification.new do |s|
   s.add_dependency('gooddata', '>= 0.5.2')
   s.add_dependency('jsonify')
   s.add_dependency('chronic')
+  s.add_dependency('rainbow')
+  s.add_dependency('kwalify')
+  s.add_dependency('pry')
 end
