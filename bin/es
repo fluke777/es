@@ -31,10 +31,11 @@ LOGIN   = ENV['LOGIN']
 PASS    = ENV['PASSWORD']
 
 program_desc 'ES generator - Should help you with working with Event Store'
-
 version Es::VERSION
 
-# GoodData.logger = Logger.new(STDOUT)
+desc 'Turn on HTTP logger'
+arg_name 'log'
+switch [:l,:logger]
 
 desc 'Creates ES'
 command :create do |c|
@@ -55,13 +56,21 @@ command :delete do |c|
   end
 end
 
+
+desc 'Show all types that are supported.'
+command :types do |c|
+  c.action do |global_options,options,args|
+    Es::Field::FIELD_TYPES.each {|t| puts t}
+  end
+end
+
 desc 'Load data'
 command :load do |c|
   c.desc 'Execute only for one entity.'
   c.default_value false
   c.flag [:o, :only]
   
-  c.desc 'Print the task in the ugly oneliner mode for use in legacy tools.'
+  c.desc 'Print the task in the ugly oneliner mode for use in legacy tools. Does not run the actual extract.'
   c.default_value false
   c.switch [:j, :json]
   
@@ -80,31 +89,31 @@ command :load do |c|
 
     load.entities.each do |entity|
       next if options[:only] && entity.name != options[:only]
-      web_dav_file = Es::Helpers.load_destination_dir(PID, entity) + '/' + Es::Helpers.load_destination_file(entity)
-      if options[:j]
+      web_dav_file = Es::Helpers.load_destination_dir(PID, entity) + '/' + Es::Helpers.destination_file(entity)
+      if options[:verbose]
         puts "Entity #{entity.name}".bright
+        puts "Configuration from #{filename}"
+        puts "Will load from #{entity.file} to #{web_dav_file}"
+        puts JSON::pretty_generate(entity.to_load_fragment(PID))
+      end
+      if options[:j]
+        puts "Entity #{entity.name}".bright unless options[:verbose]
         puts "load the file #{entity.file} to destination #{web_dav_file} and run the specified as the task"
         puts "======= Load JSON start"
         puts entity.to_load_fragment(PID).to_json.color(:blue)
         puts "======= Load JSON end"
         puts
       else
-        if options[:verbose]
-          puts "Entity #{entity.name}".bright
-          puts "Will load from #{filename}"
-        else
-          
-          # GoodData.connection.upload source, dir
-          # data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/uploadTasks", task
-          # link = data["asyncTask"]["link"]["poll"]
-          # response = GoodData.get(link, :process => false)
-          # while response.code != 204
-          #   sleep 10
-          #   response = GoodData.get(link, :process => false)
-          # end
-          # puts "Done #{source}"
-          
+        
+        GoodData.connection.upload entity.file, Es::Helpers.load_destination_dir(PID, entity)
+        data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/uploadTasks", entity.to_load_fragment(PID).to_json
+        link = data["asyncTask"]["link"]["poll"]
+        response = GoodData.get(link, :process => false)
+        while response.code != 204
+          sleep 10
+          response = GoodData.get(link, :process => false)
         end
+        puts "Done" if options[:verbose]
       end
     end
   end
@@ -115,37 +124,37 @@ desc 'Load Deleted Records'
 command :load_deleted do |c|
   c.action do |global_options,options,args|
 
-    fail "Provide path to the loading configuration as a first argument" if args.first.nil?
-    fail "File #{args.fail} cannot be found" unless File.exist?(args.first)
+    load_config_file = args.first
+    fail "Provide path to the loading configuration as a first argument" if load_config_file.nil?
+    fail "File #{args.fail} cannot be found" unless File.exist?(load_config_file)
     
-    load_config_file = JSON.parse(File.read(args.first), :symbolize_names => true)
-    # entities = Es::Helpers.parse_load_config(load_config_file)
-    # entities.each do |f|
-    # 
-    #   source = f.file
-    #   source_dir = File.dirname(source)
-    #   filename = File.basename(source)
-    #   base =  File.basename(source, '.*')
-    #   ext = File.extname(source)
-    #   deleted_filename = "#{base}-deleted#{ext}"
-    #   deleted_source = "#{source_dir}/#{base}-deleted#{ext}"
-    #   destination_dir = "#{f.name}-deleted-#{DateTime.now.strftime("%Y-%M-%d_%H:%M:%S")}"
-    #   destination = "/uploads/#{destination_dir}/#{deleted_filename}"
-    #   puts "Will load from #{deleted_source}"
-    #   puts "Will load to #{destination}"
-    #   GoodData.connection.upload deleted_source, destination_dir
-    #   f.file = destination
-    #   task = Es::generate('deleted_records', f)
-    #   data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/uploadTasks", task
-    #   link = data["asyncTask"]["link"]["poll"]
-    #   response = GoodData.get(link, :process => false)
-    #   while response.code != 204
-    #     sleep 10
-    #     response = GoodData.get(link, :process => false)
-    #   end
-    #   puts "Done #{source}"
-    #   # puts task
-    # end
+    load_config = Es::Helpers.load_config(load_config_file)
+    load = Es::Load.parse(load_config)
+    
+    load.entities.each do |entity|
+      source_dir = File.dirname(entity.file)
+      deleted_filename = Es::Helpers.destination_file(entity, :deleted => true)
+      deleted_source = "#{source_dir}/#{deleted_filename}"
+      next unless File.exist? deleted_source
+      
+      e = Es::Entity.new(entity.name, {
+        :file   => deleted_source,
+        :fields => [
+          Es::Field.new('id', 'recordid'),
+          Es::Field.new('timestamp', 'timestamp'),
+          Es::Field.new('isDeleted', 'isDeleted')
+        ]
+      })
+      GoodData.connection.upload deleted_filename, Es::Helpers.load_destination_dir(PID, entity)
+      data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/uploadTasks", e.to_load_fragment(PID).to_json
+      link = data["asyncTask"]["link"]["poll"]
+      response = GoodData.get(link, :process => false)
+      while response.code != 204
+        sleep 10
+        response = GoodData.get(link, :process => false)
+      end
+      puts "Done #{source}"
+    end
   end
 end
 
@@ -161,7 +170,7 @@ command :extract do |c|
   c.default_value false
   c.switch [:v, :verbose]
   
-  c.desc 'Print the task in the ugly oneliner mode for use in legacy tools.'
+  c.desc 'Print the task in the ugly oneliner mode for use in legacy tools. Does not run the actual extract.'
   c.default_value false
   c.switch [:j, :json]
   
@@ -186,14 +195,12 @@ command :extract do |c|
       next if options[:only] && entity.name != options[:only]
       # pp extract.to_extract_fragment(PID)
 
-      # web_dav_file = Es::Helpers.load_destination_dir(PID, entity) + '/' + Es::Helpers.load_destination_file(entity)
-      if options[:verbose]
-        puts "Entity #{entity.name.bright}"
-        puts JSON.pretty_generate(entity.to_extract_fragment(PID)) if options[:verbose]
-      end
+      puts "Entity #{entity.name.bright}" if options[:verbose] || options[:json] || options[:debug]
+      puts "Config from #{load_config_file} and #{extract_config_file}"
 
-      if options[:j]
-        puts "Entity #{entity.name.bright}" if !options[:verbose]
+      puts JSON.pretty_generate(entity.to_extract_fragment(PID)) if options[:verbose] if options[:debug]
+
+      if options[:json]
         # puts "load the file #{entity.file} to destination #{web_dav_file} and run the specified as the task"
         puts "======= Extract JSON start"
         puts entity.to_extract_fragment(PID, :pretty => false).to_json.color(:blue)
@@ -212,8 +219,9 @@ command :extract do |c|
           sleep 10
           response = GoodData.get(link, :process => false)
         end
-        web_dav_file = Es::Helpers.load_destination_dir(PID, entity) + '/' + Es::Helpers.load_destination_file(entity)
+        web_dav_file = Es::Helpers.extract_destination_dir(PID, entity) + '/' + Es::Helpers.destination_file(entity)
         GoodData.connection.download web_dav_file, entity.file
+        puts "Done" if options[:verbose]
       end
     end
   end
@@ -225,6 +233,7 @@ pre do |global,command,options,args|
   # chosen command
   # Use skips_pre before a command to skip this block
   # on that command only
+  GoodData.logger = Logger.new(STDOUT) if global[:logger]
   begin
     GoodData.connect LOGIN, PASS, nil, 0
   rescue RestClient::BadRequest => e

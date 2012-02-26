@@ -81,6 +81,10 @@ module Es
             Es::SnapshotField.new("snapshot", "snapshot")
           elsif field == "autoincrement"
             Es::AutoincrementField.new("generate", "autoincrement")
+          elsif field == "duration"
+            Es::DurationField.new("duration", "duration")
+          elsif field == "velocity"
+            Es::DurationField.new("velocity", "velocity")
           elsif field.respond_to?(:keys) && field.keys.first == :hid
             Es::HIDField.new('hid', "historicid", {
               :entity => field[:hid][:from_entity],
@@ -209,10 +213,12 @@ module Es
     end
 
     def to_extract_fragment(pid, options = {})
+      populates_element = (fields.find {|f| f.is_hid?} || fields.find {|f| f.is_recordid?} || fields.find {|f| f.is_autoincrement?})
+      fail "Needs to have at least on ID element. Use Id, HID, autoincrement" if populates_element.nil?
       pretty = options[:pretty].nil? ? true : options[:pretty]
       read_map = [{
-        :file       => Es::Helpers.load_destination_dir(pid, self) + '/' + Es::Helpers.load_destination_file(self),
-        :populates  => (fields.find {|f| f.is_hid?} || fields.find {|f| f.type == "recordid"}).name,
+        :file       => Es::Helpers.web_dav_extract_destination_dir(pid, self) + '/' + Es::Helpers.destination_file(self),
+        :populates  => populates_element.name,
         :columns    => (fields.map do |field|
           field.to_extract_fragment(pid, options)
         end)
@@ -233,7 +239,7 @@ module Es
       {
         :uploadTask => {
           :entity       => name,
-          :file         => Es::Helpers.load_destination_dir(pid, self) + '/' + Es::Helpers.load_destination_file(self),
+          :file         => Es::Helpers.web_dav_load_destination_dir(pid, self) + '/' + Es::Helpers.destination_file(self),
           :attributes   => fields.map {|f| f.to_load_fragment(pid)}
         }
       }
@@ -254,7 +260,21 @@ module Es
 
   class Field
 
-    FIELD_TYPES = ["attribute", "recordid", "timeAttribute", "fact", "timestamp", "autoincrement", "snapshot", "hid", "historicid"]
+    ATTRIBUTE_TYPE      = "attribute"
+    RECORDID_TYPE       = "recordid"
+    DATE_TYPE           = "date"
+    TIME_TYPE           = "time"
+    FACT_TYPE           = "fact"
+    TIMESTAMP_TYPE      = "timestamp"
+    AUTOINCREMENT_TYPE  = "autoincrement"
+    SNAPSHOT_TYPE       = "snapshot"
+    HID_TYPE            = "hid"
+    HISTORIC_TYPE       = "historicid"
+    DURATION_TYPE       = "duration"
+    VELOCITY_TYPE       = "velocity"
+    IS_DELETED_TYPE     = 'isDeleted'
+
+    FIELD_TYPES = [ATTRIBUTE_TYPE, RECORDID_TYPE, DATE_TYPE, TIME_TYPE, FACT_TYPE, TIMESTAMP_TYPE, AUTOINCREMENT_TYPE, SNAPSHOT_TYPE, HID_TYPE, HISTORIC_TYPE, DURATION_TYPE, VELOCITY_TYPE, IS_DELETED_TYPE]
 
     def self.parse(spec)
       raise InsufficientSpecificationError.new("Field specification is empty") if spec.nil?
@@ -264,7 +284,15 @@ module Es
 
     attr_accessor :type, :name
 
+    def is_recordid?
+      type == RECORDID_TYPE
+    end
+
     def is_snapshot?
+      false
+    end
+
+    def is_duration?
       false
     end
 
@@ -273,6 +301,10 @@ module Es
     end
 
     def is_hid?
+      false
+    end
+
+    def is_velocity?
       false
     end
 
@@ -301,7 +333,7 @@ module Es
     def to_load_fragment(pid)
       {
         :name => name,
-        :type => type
+        :type => Es::Helpers.type_to_load_type(type)
       }
     end
 
@@ -349,24 +381,103 @@ module Es
 
     def to_extract_fragment(pid, options = {})
       {
-        :type => "historicid",
-        :ops  => [
-          through.nil? ? {:type => "recordid"} : {:type => "stream", :data => through},
-          {
-            :type => "entity",
-            :data => entity,
-            :ops  => fields.map do |f|
-              {
-                :type => "stream",
-                :data => f
-              }
-            end
-          }
-        ]
+        :name => name,
+        :preferred => name,
+        :definition => {
+          :ops  => [
+            through.nil? ? {:type => RECORDID_TYPE} : {:type => "stream", :data => through},
+            {
+              :type => "entity",
+              :data => entity,
+              :ops  => fields.map do |f|
+                {
+                  :type => "stream",
+                  :data => f
+                }
+              end
+            }
+          ],
+          :type => "historicid"
+        }
       }
     end
 
   end
+
+  class DurationField < Field
+
+    attr_accessor :type, :name
+
+    def is_duration?
+      true
+    end
+
+    def to_extract_fragment(pid, options = {})
+      {
+          :name       => "StageDuration",
+          :preferred  => "stageduration",
+          :definition => {
+              :type => "case",
+              :ops  => [{
+                  :type => "option",
+                  :ops => [{
+                      :type => "=",
+                      :ops => [{
+                          :type => "stream",
+                          :data => "IsClosed"
+                      },
+                      {
+                          :type => "match",
+                          :data => "false"
+                      }]
+                  },
+                  {
+                      :type => "duration",
+                      :ops  => [{
+                          :type => "stream",
+                          :data => "StageName"
+                      }]
+                  }]
+              },
+              {
+                  :type => "option",
+                  :ops  => [{
+                      :type => "const",
+                      :data => 1
+                  },
+                  {
+                      :type => "const",
+                      :data => 0
+                  }]
+              }]
+          }
+      }
+    end
+  end
+
+  class VelocityField < Field
+
+    attr_accessor :type, :name
+
+    def is_velocity?
+      true
+    end
+
+    def to_extract_fragment(pid, options = {})
+      {
+        :name => "StageVelocity",
+        :preferred => "stagevelocity",
+        :definition => {
+            :type => "velocity",
+            :ops => [{
+                :type => "stream",
+                :data => "StageName"
+            }]
+        }
+      }
+    end
+  end
+
 
   class AutoincrementField < Field
 
@@ -406,47 +517,81 @@ module Es
       JSON.parse(File.read(filename), :symbolize_names => true)
     end
 
-    def self.load_destination_dir(pid, entity)
-      "/uploads/#{pid}/#{entity.name}"
+    def self.web_dav_load_destination_dir(pid, entity)
+      "/uploads/in_#{pid}_#{entity.name}"
     end
 
-    def self.load_destination_file(entity, options={})
-      with_date = options[:with_date] || false
+    def self.web_dav_extract_destination_dir(pid, entity)
+      "/out_#{pid}_#{entity.name}"
+    end
+
+    def self.load_destination_dir(pid, entity)
+      "in_#{pid}_#{entity.name}"
+    end
+
+    def self.extract_destination_dir(pid, entity)
+      "out_#{pid}_#{entity.name}"
+    end
+
+    def self.destination_file(entity, options={})
+      with_date = options[:with_date]
+      deleted = options[:deleted]
       source = entity.file
       filename = File.basename(source)
       base =  File.basename(source, '.*')
       ext = File.extname(filename)
+      base = deleted ? "#{base}_deleted" : base
       with_date ? base + '_' + DateTime.now.strftime("%Y-%M-%d_%H:%M:%S") + ext : base + ext
     end
 
-    def self.type_to_type(type)
-      case type
-      when "recordid"
-        "recordid"
-      when "attribute"
-        "stream"
-      when "fact"
-        "stream"
-      when "timeAttribute"
-        "stream"
-      when "snapshot"
-        "snapshot"
+    def self.type_to_load_type(type)
+      types = {
+        Es::Field::RECORDID_TYPE        => "recordid",
+        Es::Field::TIMESTAMP_TYPE       => "timestamp",
+        Es::Field::ATTRIBUTE_TYPE       => "attribute",
+        Es::Field::FACT_TYPE            => "fact",
+        Es::Field::TIME_TYPE            => "timeAttribute",
+        Es::Field::DATE_TYPE            => "timeAttribute",
+        Es::Field::IS_DELETED_TYPE      => 'isDeleted'
+      }
+      if types.has_key?(type) then
+        types[type]
+      else
+        fail "Type #{type} not found."
       end
     end
-    # field.type == 'recordid' ? 'recordid' : 'stream'
-    
+
+
+    def self.type_to_type(type)
+      types = {
+        Es::Field::RECORDID_TYPE        => "recordid",
+        Es::Field::ATTRIBUTE_TYPE       => "stream",
+        Es::Field::FACT_TYPE            => "stream",
+        Es::Field::SNAPSHOT_TYPE        => "snapshot",
+        Es::Field::TIME_TYPE            => "stream",
+        Es::Field::DATE_TYPE            => "stream"
+        
+      }
+      if types.has_key?(type) then
+        types[type]
+      else
+        fail "Type #{type} not found."
+      end
+    end
+
     def self.type_to_operation(type)
-      case type
-      when "recordid"
-        "value"
-      when "attribute"
-        "value"
-      when "fact"
-        "number"
-      when "snapshot"
-        "snapshot"
-      when "timeAttribute"
-        "date"
+      types = {
+        Es::Field::RECORDID_TYPE      => "value",
+        Es::Field::ATTRIBUTE_TYPE     => "value",
+        Es::Field::FACT_TYPE          => "number",
+        Es::Field::SNAPSHOT_TYPE      => "snapshot",
+        Es::Field::TIME_TYPE          => "key",
+        Es::Field::DATE_TYPE          => "date"
+      }
+      if types.has_key?(type) then
+        types[type]
+      else
+        fail "Type #{type} not found."
       end
     end
   end
