@@ -518,7 +518,7 @@ module Es
     end
 
     def self.web_dav_load_destination_dir(pid, entity)
-      "/uploads/in_#{pid}_#{entity.name}"
+      "/uploads/#{pid}"
     end
 
     def self.web_dav_extract_destination_dir(pid, entity)
@@ -526,7 +526,7 @@ module Es
     end
 
     def self.load_destination_dir(pid, entity)
-      "in_#{pid}_#{entity.name}"
+      "#{pid}"
     end
 
     def self.extract_destination_dir(pid, entity)
