@@ -198,7 +198,7 @@ command :extract do |c|
       puts "Entity #{entity.name.bright}" if options[:verbose] || options[:json] || options[:debug]
       puts "Config from #{load_config_file} and #{extract_config_file}"
 
-      puts JSON.pretty_generate(entity.to_extract_fragment(PID)) if options[:verbose] if options[:debug]
+      puts JSON.pretty_generate(entity.to_extract_fragment(PID)) if options[:debug]
 
       if options[:json]
         # puts "load the file #{entity.file} to destination #{web_dav_file} and run the specified as the task"
