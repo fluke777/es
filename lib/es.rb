@@ -373,6 +373,7 @@ module Es
     end
 
     def initialize(name, type, options)
+      name = "#{name}-#{options[:entity]}"
       super(name, type)
       @entity = options[:entity] || fail("Entity has to be scpecified for a HID Field")
       @fields = options[:fields] || fail("Fields has to be scpecified for a HID Field")
