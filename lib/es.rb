@@ -48,7 +48,7 @@ module Es
       fail InsufficientSpecificationError.new("To key was not specified during the Timeframe creation") unless spec.has_key?(:to)
       fail InsufficientSpecificationError.new("From key was not specified during the Timeframe creation") unless spec.has_key?(:from)
       fail IncorrectSpecificationError.new("Interval key should be a number") if spec[:interval] && !spec[:interval].is_a?(Fixnum)
-      fail IncorrectSpecificationError.new("Interval_unit key should be one of :day, :week, :month, :year") if spec[:interval_unit] && !INTERVAL_UNITS.include?(spec[:interval_unit])
+      fail IncorrectSpecificationError.new("Interval_unit key should be one of :day, :week, :month, :year") if spec[:interval_unit] && !INTERVAL_UNITS.include?(spec[:interval_unit].to_sym)
       fail IncorrectSpecificationError.new("Interval_unit key should be one of :day, :week, :month, :year") if spec[:day_within_period] && !DAY_WITHIN_PERIOD.include?(spec[:day_within_period])
     end
 
