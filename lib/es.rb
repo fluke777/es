@@ -5,6 +5,7 @@ require 'json'
 require 'rainbow'
 require 'kwalify'
 require 'active_support/time'
+require 'active_support/ordered_hash'
 
 module Es
 
@@ -223,16 +224,19 @@ module Es
           field.to_extract_fragment(pid, options)
         end)
       }]
-      
-      {
-        :readTask => {
-          :entity => name,
-          :timeFrames => (timeframes.map{|t| t.to_extract_fragment(pid, options)}),
-          :readMap => (pretty ? read_map : read_map.to_json),
-          :timezone => 'UTC',
-          :computedStreams => '[{"type":"computed","ops":[]}]'
-        }
-      }
+
+
+      d = ActiveSupport::OrderedHash.new
+      d['entity'] = name
+      d['timezone'] = 'UTC'
+      d['readMap'] = (pretty ? read_map : read_map.to_json)
+      d['computedStreams'] = '[{"type":"computed","ops":[]}]'
+      d['timeFrames'] = (timeframes.map{|t| t.to_extract_fragment(pid, options)})
+
+      task = ActiveSupport::OrderedHash.new
+      task['readTask'] = d
+      task
+
     end
 
     def to_load_fragment(pid)
