@@ -25,10 +25,10 @@ require 'chronic'
 
 include GLI
 
-PID     = ENV['PID']
-ES_NAME = ENV['ES_NAME']
-LOGIN   = ENV['LOGIN']
-PASS    = ENV['PASSWORD']
+PID       = ENV['PID']
+ES_NAME   = ENV['ES_NAME']
+LOGIN     = ENV['LOGIN']
+PASSWORD  = ENV['PASSWORD']
 
 program_desc 'ES generator - Should help you with working with Event Store'
 version Es::VERSION
@@ -104,15 +104,15 @@ command :load do |c|
         puts "======= Load JSON end"
         puts
       else
-        
-        GoodData.connection.upload entity.file, Es::Helpers.load_destination_dir(PID, entity)
-        data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/uploadTasks", entity.to_load_fragment(PID).to_json
-        link = data["asyncTask"]["link"]["poll"]
-        response = GoodData.get(link, :process => false)
-        while response.code != 204
-          sleep 10
-          response = GoodData.get(link, :process => false)
-        end
+        enity.load(PID)
+        # GoodData.connection.upload entity.file, Es::Helpers.load_destination_dir(PID, entity)
+        # data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/uploadTasks", entity.to_load_fragment(PID).to_json
+        # link = data["asyncTask"]["link"]["poll"]
+        # response = GoodData.get(link, :process => false)
+        # while response.code != 204
+        #   sleep 10
+        #   response = GoodData.get(link, :process => false)
+        # end
         puts "Done" if options[:verbose]
       end
     end
@@ -159,7 +159,6 @@ command :load_deleted do |c|
 end
 
 desc 'Extract'
-
 command :extract do |c|
   
   c.desc 'Execute only for one entity.'
@@ -227,15 +226,105 @@ command :extract do |c|
   end
 end
 
+
+desc 'Initial load column'
+command :load_column do |c|
+  
+  c.desc 'Verbose mode'
+  c.default_value false
+  c.switch [:v, :verbose]
+  
+  c.desc 'Run as usual but output the task definition in pretty print for debugging.'
+  c.default_value true
+  c.switch [:d, :debug]
+
+  c.desc 'Name of the column.'
+  c.default_value nil
+  c.flag [:n, :name]
+
+  c.desc 'Name of the entity.'
+  c.default_value nil
+  c.flag [:e, :entity]
+
+  c.desc 'Type of the column.'
+  c.default_value nil
+  c.flag [:t, :type]
+
+  c.desc 'Base config filename.'
+  c.default_value nil
+  c.flag [:b, :base]
+
+  c.action do |global_options,options,args|
+    puts "EXPERIMENTAL FAKED FEATURE".color(:red)
+    file = "/Users/fluke/sandbox/test.csv"
+    name = options[:name]
+    type = options[:type]
+    entity = options[:entity]
+    base_filename = options[:base]
+
+    fail "You need to specify column name" if name.nil?
+    fail "You need to specify column type" if type.nil?
+    fail "You need to specify entity name" if entity.nil?
+
+    puts "Would download stuff to file #{file}"
+
+    base_config_file = Es::Helpers.load_config(base_filename)
+    base = Es::Load.parse(base_config_file)
+
+    load = Es::Load.new([
+      Es::Entity.new(entity, {
+        :file => file,
+        :fields => [
+          Es::Field.new('id', 'recordid'),
+          Es::Field.new('timestamp', 'timestamp'),
+          Es::Field.new(name, type)
+        ]
+      })
+    ])
+
+    base.get_entity(entity).add_field(Es::Field.new(name, type))
+    puts "Added field #{field.name}" if options[:verbose]
+    base.to_config_file(base_filename)
+    
+    load.entities.first.load(PID)
+  end
+end
+
+desc 'Shows more info about'
+command :inspect do |c|
+
+  c.action do |global_options,options,args|
+
+    what = args.first
+    filename = args[1]
+
+    case what
+    when "load"
+      fail "Specify a file with base config" if filename.nil?
+      base_config_file = Es::Helpers.load_config(filename)
+      base = Es::Load.parse(base_config_file)
+      base.entities.each do |entity|
+        puts entity.to_table
+      end
+    end
+  end
+end
+
+
 pre do |global,command,options,args|
   # Pre logic here
   # Return true to proceed; false to abourt and not call the
   # chosen command
   # Use skips_pre before a command to skip this block
   # on that command only
+  fail "PID env variable should be specified" if PID.nil? || PID.empty?
+  fail "ES_NAME env variable should be specified" if ES_NAME.nil? || ES_NAME.empty?
+  fail "LOGIN env variable should be specified" if LOGIN.nil? || LOGIN.empty?
+  fail "PASSWORD env variable should be specified" if PASSWORD.nil? || PASSWORD.empty?
+
   GoodData.logger = Logger.new(STDOUT) if global[:logger]
   begin
-    GoodData.connect LOGIN, PASS, nil, 0
+    GoodData.connect LOGIN, PASSWORD, nil, 0
   rescue RestClient::BadRequest => e
     puts "Login Failed"
     exit 1

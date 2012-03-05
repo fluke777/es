@@ -6,6 +6,7 @@ require 'rainbow'
 require 'kwalify'
 require 'active_support/time'
 require 'active_support/ordered_hash'
+require 'terminal-table'
 
 module Es
 
@@ -166,10 +167,24 @@ module Es
       })
     end
 
+    def get_entity(name)
+      entities.detect {|e| e.name == name}
+    end
+
     def validate
       names = entities.map {|e| e.name}.uniq
       names.each do |name|
         merged_entity = get_merged_entity_for(name)
+      end
+    end
+
+    def to_config
+      entities.map {|e| e.to_config}
+    end
+
+    def to_config_file(filename)
+      File.open(filename, 'w') do |f|
+        f.write(JSON.pretty_generate(to_config))
       end
     end
 
@@ -249,6 +264,20 @@ module Es
       }
     end
 
+    def to_config
+      {
+        :entity => name,
+        :file   => file,
+        :fields => fields.map {|f| f.to_config}
+      }
+    end
+
+    def to_table
+      t = Terminal::Table.new :headings => [name]
+      fields.map {|f| t << [f.name]}
+      t
+    end
+
     def has_field?(name)
       !!fields.detect {|f| f.name == name}
     end
@@ -256,8 +285,22 @@ module Es
     def get_field(name)
       fields.detect {|f| f.name == name}
     end
-    
 
+    def add_field(field)
+      fail Es::IncorrectSpecificationError.new("There already is a field with name #{field.name} in entity #{name}") if fields.detect {|f| f.name == field.name}
+      fields << field
+    end
+
+    def load(pid)
+      GoodData.connection.upload file, Es::Helpers.load_destination_dir(pid, self)
+      data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{ES_NAME}/uploadTasks", to_load_fragment(pid).to_json
+      link = data["asyncTask"]["link"]["poll"]
+      response = GoodData.get(link, :process => false)
+      while response.code != 204
+        sleep 10
+        response = GoodData.get(link, :process => false)
+      end
+    end
   end
 
 # Fields
@@ -338,6 +381,13 @@ module Es
       {
         :name => name,
         :type => Es::Helpers.type_to_load_type(type)
+      }
+    end
+
+    def to_config
+      {
+        :name => name,
+        :type => type
       }
     end
 
