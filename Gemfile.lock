@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    es (0.0.1)
+    es (0.0.2)
       activesupport
       chronic
       fastercsv
@@ -40,7 +40,7 @@ GEM
     jsonify (0.3.1)
       multi_json (~> 1.0)
     kwalify (0.7.2)
-    method_source (0.7.0)
+    method_source (0.7.1)
     mime-types (1.17.2)
     multi_json (1.0.4)
     parseconfig (0.5.2)

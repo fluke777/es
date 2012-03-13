@@ -387,7 +387,7 @@ module Es
     def to_config
       {
         :name => name,
-        :type => (type == 'none' ? '' : type),
+        :type => (type == 'none' ? '' : type)
       }
     end
 
