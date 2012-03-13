@@ -187,51 +187,79 @@ command :extract do |c|
   c.desc 'Run as usual but output the task definition in pretty print for debugging.'
   c.default_value true
   c.switch [:d, :debug]
+
+  c.desc 'Base files directory. If specified it will ignore specific files and it will pick up all files in this directory with pattern load*.json'
+  c.default_value nil
+  c.flag [:b, :basedir]
+
+  c.desc 'Extract files directory. If specified it will ignore specific files and it will pick up all files in this directory with pattern extract*.json'
+  c.default_value nil
+  c.flag [:e, :extractdir]
   
+
   c.action do |global_options,options,args|
-    
-    fail "Provide path to the loading configuration as a first argument" if args.first.nil?
-    load_config_file = args.first
-    fail "Provide path to the extract configuration as a second argument" if args[1].nil?
-    extract_config_file = args[1]
-    
-    load_config = Es::Helpers.load_config(load_config_file)
-    load = Es::Load.parse(load_config)
-    
-    extract_config = Es::Helpers.load_config(extract_config_file)
-    extract = Es::Extract.parse(extract_config, load)
-    
-    extract.entities.each do |entity|
-      next if options[:only] && entity.name != options[:only]
-      # pp extract.to_extract_fragment(PID)
+    base_dir = options[:basedir]
+    extract_dir = options[:extractdir]
 
-      puts "Entity #{entity.name.bright}" if options[:verbose] || options[:json] || options[:debug]
-      puts "Config from #{load_config_file} and #{extract_config_file}"
+    if base_dir.nil? && extract_dir.nil?
+      fail "Provide path to the loading configuration as a first argument" if args.first.nil?
+      load_config_files = [args.first]
+      fail "Provide path to the extract configuration as a second argument" if args[1].nil?
+      extract_config_files = [args[1]]
+    else
+      # puts "would grab files like this #{"#{base_dir}/json*.json"}"
+      load_config_files = Dir::glob("#{base_dir}/load*.json")
+      extract_config_files = Dir::glob("#{base_dir}/extract*.json")
+    end
 
-      puts JSON.pretty_generate(entity.to_extract_fragment(PID)) if options[:debug]
+    # build one giant load config
+    load_entities = load_config_files.reduce([]) do |memo, filename|
+      fail "File #{filename} cannot be found" unless File.exist?(filename)
+      load_config = Es::Helpers.load_config(filename)
+      load = Es::Load.parse(load_config)
+      memo.concat(load.entities)
+    end
+    hyper_load = Es::Load.new(load_entities)
 
-      if options[:json]
-        # puts "load the file #{entity.file} to destination #{web_dav_file} and run the specified as the task"
-        puts "======= Extract JSON start"
-        puts entity.to_extract_fragment(PID, :pretty => false).to_json.color(:blue)
-        puts "======= Extract JSON end"
-        puts
-      else
-        begin
-          data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/readTasks", entity.to_extract_fragment(PID, :pretty => false).to_json
-        rescue RestClient::BadRequest => e
-          puts e.inspect
-          exit 1
+    extract_config_files.each do |extract_config_file|
+      fail "File #{extract_config_file} cannot be found" unless File.exist?(extract_config_file)
+      extract_config = Es::Helpers.load_config(extract_config_file)
+      extract = Es::Extract.parse(extract_config, hyper_load)
+
+      extract.entities.each do |entity|
+        next if options[:only] && entity.name != options[:only]
+        # pp extract.to_extract_fragment(PID)
+
+        if options[:verbose] || options[:json] || options[:debug] then
+          puts "Entity #{entity.name.bright}" 
+          puts "Config from #{load_config_files.join(', ')} and #{extract_config_file}"
         end
-        link = data["asyncTask"]["link"]["poll"]
-        response = GoodData.get(link, :process => false)
-        while response.code != 204
-          sleep 10
+
+        puts JSON.pretty_generate(entity.to_extract_fragment(PID)) if options[:debug]
+
+        if options[:json]
+          # puts "load the file #{entity.file} to destination #{web_dav_file} and run the specified as the task"
+          puts "======= Extract JSON start"
+          puts entity.to_extract_fragment(PID, :pretty => false).to_json.color(:blue)
+          puts "======= Extract JSON end"
+          puts
+        else
+          begin
+            data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/readTasks", entity.to_extract_fragment(PID, :pretty => false).to_json
+          rescue RestClient::BadRequest => e
+            puts e.inspect
+            exit 1
+          end
+          link = data["asyncTask"]["link"]["poll"]
           response = GoodData.get(link, :process => false)
+          while response.code != 204
+            sleep 10
+            response = GoodData.get(link, :process => false)
+          end
+          web_dav_file = Es::Helpers.extract_destination_dir(PID, entity) + '/' + Es::Helpers.destination_file(entity)
+          GoodData.connection.download web_dav_file, entity.file
+          puts "Done" if options[:verbose]
         end
-        web_dav_file = Es::Helpers.extract_destination_dir(PID, entity) + '/' + Es::Helpers.destination_file(entity)
-        GoodData.connection.download web_dav_file, entity.file
-        puts "Done" if options[:verbose]
       end
     end
   end
