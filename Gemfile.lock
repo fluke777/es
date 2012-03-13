@@ -4,18 +4,20 @@ PATH
     es (0.0.1)
       activesupport
       chronic
+      fastercsv
       gli
-      gooddata (>= 0.5.2)
+      gooddata (>= 0.5.3)
       i18n
       jsonify
       kwalify
       pry
       rainbow
+      terminal-table
 
 PATH
   remote: ../gooddata-ruby
   specs:
-    gooddata (0.5.2)
+    gooddata (0.5.3)
       fastercsv
       json
       json_pure
@@ -52,8 +54,9 @@ GEM
       json (~> 1.4)
     rest-client (1.6.7)
       mime-types (>= 1.16)
-    rubyzip (0.9.5)
+    rubyzip (0.9.6.1)
     slop (2.4.4)
+    terminal-table (1.4.4)
 
 PLATFORMS
   ruby

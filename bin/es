@@ -22,6 +22,7 @@ require 'es'
 require 'ostruct'
 require 'date'
 require 'chronic'
+require 'fastercsv'
 
 include GLI
 
@@ -104,15 +105,7 @@ command :load do |c|
         puts "======= Load JSON end"
         puts
       else
-        enity.load(PID)
-        # GoodData.connection.upload entity.file, Es::Helpers.load_destination_dir(PID, entity)
-        # data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/uploadTasks", entity.to_load_fragment(PID).to_json
-        # link = data["asyncTask"]["link"]["poll"]
-        # response = GoodData.get(link, :process => false)
-        # while response.code != 204
-        #   sleep 10
-        #   response = GoodData.get(link, :process => false)
-        # end
+        entity.load(PID)
         puts "Done" if options[:verbose]
       end
     end
@@ -227,6 +220,107 @@ command :extract do |c|
 end
 
 
+desc 'Generate base conifg template'
+command :generate_base do |c|
+  
+  c.desc 'Name of the entity.'
+  c.default_value nil
+  c.flag [:e, :entity]
+
+  c.desc 'Input file.'
+  c.default_value nil
+  c.flag [:i, :input]
+
+  c.desc 'Output filename. If not provided it print to STDOUT.'
+  c.default_value nil
+  c.flag [:o, :output]
+
+  c.action do |global_options,options,args|
+    entity_name = options[:entity]
+    input_filename = options[:input]
+    output_filename = options[:output]
+
+    fail "You need to specify input entity name" if entity_name.nil?
+    fail "You need to specify input file name" if input_filename.nil?
+
+    headers = nil
+    FasterCSV.foreach(input_filename, :headers => true, :return_headers => true) do |row|
+      if row.header_row?
+        headers = row.fields
+        break
+      end
+    end
+
+    load = Es::Load.new([
+      Es::Entity.new(entity_name, {
+        :file => input_filename,
+        :fields => headers.map do |field_name|
+          Es::Field.new(field_name, "none")
+        end
+      })
+    ])
+
+    config = JSON.pretty_generate(load.to_config)
+    if output_filename.nil?
+      puts config
+    else
+      File.open(output_filename, 'w') do |f|
+        f.write config
+      end
+    end
+  end
+end
+
+desc 'Truncate entity'
+command :truncate do |c|
+  
+  c.desc 'Name of the entity.'
+  c.default_value nil
+  c.flag [:e, :entity]
+
+  c.desc 'Timestamp in epoch.'
+  c.default_value nil
+  c.flag [:t, :timestamp]
+
+  c.desc 'Base config filename.'
+  c.default_value nil
+  c.flag [:b, :base]
+
+  c.action do |global_options,options,args|
+    entity_name = options[:entity]
+    timestamp = options[:timestamp]
+    base_filename = options[:base]
+
+    fail "You need to specify entity name" if entity_name.nil?
+    fail "You need to specify timestamp" if timestamp.nil?
+    fail "You need to specify base filename" if base_filename.nil?
+
+    base_config_file = Es::Helpers.load_config(base_filename)
+    base = Es::Load.parse(base_config_file)
+
+    entity = base.get_entity(entity_name)
+    fail "There is no entity named \"#{entity_name}\"" if entity.nil?
+
+     begin
+        data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/truncateTasks", {
+          :truncateTask => {
+            :entity     => entity_name,
+            :timestamp  => timestamp.to_i
+          }
+        }
+      rescue RestClient::BadRequest => e
+        puts e.inspect
+        exit 1
+      end
+      link = data["asyncTask"]["link"]["poll"]
+      response = GoodData.get(link, :process => false)
+      while response.code != 204
+        sleep 10
+        response = GoodData.get(link, :process => false)
+      end
+  end
+end
+
 desc 'Initial load column'
 command :load_column do |c|
   
@@ -254,9 +348,13 @@ command :load_column do |c|
   c.default_value nil
   c.flag [:b, :base]
 
+  c.desc 'Input data filename.'
+  c.default_value nil
+  c.flag [:i, :input]
+
   c.action do |global_options,options,args|
-    puts "EXPERIMENTAL FAKED FEATURE".color(:red)
-    file = "/Users/fluke/sandbox/test.csv"
+    puts "EXPERIMENTAL FEATURE - BEWARE".color(:red)
+    file = options[:input]
     name = options[:name]
     type = options[:type]
     entity = options[:entity]
@@ -265,8 +363,7 @@ command :load_column do |c|
     fail "You need to specify column name" if name.nil?
     fail "You need to specify column type" if type.nil?
     fail "You need to specify entity name" if entity.nil?
-
-    puts "Would download stuff to file #{file}"
+    fail "You need to specify input file name" if file.nil?
 
     base_config_file = Es::Helpers.load_config(base_filename)
     base = Es::Load.parse(base_config_file)

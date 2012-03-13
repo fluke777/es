@@ -358,7 +358,7 @@ module Es
     def initialize(name, type)
       raise Es::IncorrectSpecificationError.new("The field name \"#{name.bright}\" does not have type specified. Type should be one of [#{FIELD_TYPES.join(', ')}]") if type.nil?
       raise Es::IncorrectSpecificationError.new("The type of field name \"#{name.bright}\" should be a string.") unless type.is_a?(String)
-      raise Es::IncorrectSpecificationError.new("The field name \"#{name.bright}\" does have wrong type specified. Specified \"#{type.bright}\" should be one of [#{FIELD_TYPES.join(', ')}]") unless FIELD_TYPES.include?(type)
+      raise Es::IncorrectSpecificationError.new("The field name \"#{name.bright}\" does have wrong type specified. Specified \"#{type.bright}\" should be one of [#{FIELD_TYPES.join(', ')}]") unless FIELD_TYPES.include?(type) || type == "none"
       @name = name
       @type = type
     end
@@ -387,7 +387,7 @@ module Es
     def to_config
       {
         :name => name,
-        :type => type
+        :type => (type == 'none' ? '' : type),
       }
     end
 
