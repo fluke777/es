@@ -85,21 +85,18 @@ command :load do |c|
 
   c.desc 'Base files directory. If specified it will ignore specific files and it will pick up all files in this directory with pattern load*.json'
   c.default_value nil
-  c.flag [:b, :base-dir]
+  c.flag [:b, :basedir]
 
   c.action do |global_options,options,args|
 
     filenames = args
-    base_dir = options[:base_dir]
-    puts base_dir
+    base_dir = options[:basedir]
     if base_dir.nil?
       fail "Provide path to the loading configuration as a first argument" if filenames.empty
     else
       # puts "would grab files like this #{"#{base_dir}/json*.json"}"
       filenames = Dir::glob("#{base_dir}/load*.json")
     end
-
-    pp filenames
 
     # for each config file
     filenames.each do |filename|
