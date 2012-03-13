@@ -92,7 +92,7 @@ command :load do |c|
     filenames = args
     base_dir = options[:basedir]
     if base_dir.nil?
-      fail "Provide path to the loading configuration as a first argument" if filenames.empty
+      fail "Provide path to the loading configuration as a first argument" if filenames.empty?
     else
       # puts "would grab files like this #{"#{base_dir}/json*.json"}"
       filenames = Dir::glob("#{base_dir}/load*.json")
