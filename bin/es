@@ -82,35 +82,52 @@ command :load do |c|
   c.desc 'Verbose mode'
   c.default_value false
   c.switch [:v, :verbose]
-  
+
+  c.desc 'Base files directory. If specified it will ignore specific files and it will pick up all files in this directory with pattern load*.json'
+  c.default_value nil
+  c.flag [:b, :base-dir]
+
   c.action do |global_options,options,args|
 
-    filename = args.first
-    fail "Provide path to the loading configuration as a first argument" if filename.nil?
-    fail "File #{args.first} cannot be found" unless File.exist?(filename)
+    filenames = args
+    base_dir = options[:base_dir]
+    puts base_dir
+    if base_dir.nil?
+      fail "Provide path to the loading configuration as a first argument" if filenames.empty
+    else
+      # puts "would grab files like this #{"#{base_dir}/json*.json"}"
+      filenames = Dir::glob("#{base_dir}/load*.json")
+    end
 
-    load_config_file = Es::Helpers.load_config(filename)
-    load = Es::Load.parse(load_config_file)
+    pp filenames
 
-    load.entities.each do |entity|
-      next if options[:only] && entity.name != options[:only]
-      web_dav_file = Es::Helpers.load_destination_dir(PID, entity) + '/' + Es::Helpers.destination_file(entity)
-      if options[:verbose]
-        puts "Entity #{entity.name}".bright
-        puts "Configuration from #{filename}"
-        puts "Will load from #{entity.file} to #{web_dav_file}"
-        puts JSON::pretty_generate(entity.to_load_fragment(PID))
-      end
-      if options[:j]
-        puts "Entity #{entity.name}".bright unless options[:verbose]
-        puts "load the file #{entity.file} to destination #{web_dav_file} and run the specified as the task"
-        puts "======= Load JSON start"
-        puts entity.to_load_fragment(PID).to_json.color(:blue)
-        puts "======= Load JSON end"
-        puts
-      else
-        entity.load(PID)
-        puts "Done" if options[:verbose]
+    # for each config file
+    filenames.each do |filename|
+      fail "File #{args.first} cannot be found" unless File.exist?(filename)
+    
+      load_config_file = Es::Helpers.load_config(filename)
+      load = Es::Load.parse(load_config_file)
+
+      load.entities.each do |entity|
+        next if options[:only] && entity.name != options[:only]
+        web_dav_file = Es::Helpers.load_destination_dir(PID, entity) + '/' + Es::Helpers.destination_file(entity)
+        if options[:verbose]
+          puts "Entity #{entity.name}".bright
+          puts "Configuration from #{filename}"
+          puts "Will load from #{entity.file} to #{web_dav_file}"
+          puts JSON::pretty_generate(entity.to_load_fragment(PID))
+        end
+        if options[:j]
+          puts "Entity #{entity.name}".bright unless options[:verbose]
+          puts "load the file #{entity.file} to destination #{web_dav_file} and run the specified as the task"
+          puts "======= Load JSON start"
+          puts entity.to_load_fragment(PID).to_json.color(:blue)
+          puts "======= Load JSON end"
+          puts
+        else
+          entity.load(PID)
+          puts "Done" if options[:verbose]
+        end
       end
     end
   end
