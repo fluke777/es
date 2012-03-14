@@ -551,13 +551,6 @@ module Es
       if validate
         parser = Kwalify::Yaml::Parser.new
         document = parser.parse_file(filename)
-        errors = parser.errors()
-        if errors && !errors.empty?
-          for e in errors
-            puts "#{e.linenum}:#{e.column} [#{e.path}] #{e.message}"
-          end
-          exit
-        end
       end
       JSON.parse(File.read(filename), :symbolize_names => true)
     end
