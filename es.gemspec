@@ -23,10 +23,10 @@ spec = Gem::Specification.new do |s|
   s.add_dependency('jsonify')
   s.add_dependency('chronic')
   s.add_dependency('rainbow')
-  s.add_dependency('kwalify')
   s.add_dependency('pry')
   s.add_dependency('activesupport')
   s.add_dependency('i18n')
   s.add_dependency('terminal-table')
   s.add_dependency('fastercsv')
+  s.add_dependency('yajl-ruby')
 end

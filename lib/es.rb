@@ -3,7 +3,7 @@ require 'chronic'
 require 'jsonify'
 require 'json'
 require 'rainbow'
-require 'kwalify'
+require 'yajl'
 require 'active_support/time'
 require 'active_support/ordered_hash'
 require 'terminal-table'
@@ -548,11 +548,13 @@ module Es
     TEMPLATE_DIR = "./lib/templates"
 
     def self.load_config(filename, validate=true)
-      if validate
-        parser = Kwalify::Yaml::Parser.new
-        document = parser.parse_file(filename)
-      end
-      JSON.parse(File.read(filename), :symbolize_names => true)
+        json = File.new(filename, 'r')
+          parser = Yajl::Parser.new(:symbolize_keys => true)
+        begin
+          doc = parser.parse(json)
+        rescue Yajl::ParseError => e
+          fail Yajl::ParseError.new("Failed during parsing file #{filename}\n" + e.message)
+        end
     end
 
     def self.web_dav_load_destination_dir(pid, entity)

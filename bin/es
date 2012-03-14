@@ -487,6 +487,7 @@ on_error do |exception|
   if exception.is_a?(SystemExit) && exception.status == 0
     false
   else
+    # pp exception.inspect
     puts exception.message.color(:red)
     false
   end

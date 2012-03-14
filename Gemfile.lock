@@ -13,6 +13,7 @@ PATH
       pry
       rainbow
       terminal-table
+      yajl-ruby
 
 PATH
   remote: ../gooddata-ruby
@@ -57,6 +58,7 @@ GEM
     rubyzip (0.9.6.1)
     slop (2.4.4)
     terminal-table (1.4.4)
+    yajl-ruby (1.1.0)
 
 PLATFORMS
   ruby
