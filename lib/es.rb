@@ -101,7 +101,7 @@ module Es
         Entity.new(entity_name, {
           :fields => fields,
           :file   => entity_spec[:file],
-          :timeframe => parsed_timeframe || global_timeframe || (raise "Timeframe has to be defined")
+          :timeframe => parsed_timeframe || global_timeframe || (fail "Timeframe has to be defined")
         })
       end
 
@@ -140,16 +140,9 @@ module Es
     attr_accessor :entities
 
     def self.parse(spec)
-      
-      begin
       Load.new(spec.map do |entity_spec|
-          Entity.parse(entity_spec)
+        Entity.parse(entity_spec)
       end)
-      rescue Es::IncorrectSpecificationError => e
-        puts "Seems like there are multiple definitions for the same entity and there is a column which has same name".color(:red)
-        fail
-      end
-      
     end
 
     def initialize(entities)
@@ -194,25 +187,22 @@ module Es
     attr_accessor :name, :fields, :file, :timeframes
 
     def self.parse(spec)
-      begin
-        entity = Entity.new(spec[:entity], {
-          :file => spec[:file],
-          :fields => spec[:fields] && spec[:fields].map {|field_spec| Field.parse(field_spec)}
-        })
-      rescue Es::IncorrectSpecificationError => e
-        puts "Error during parsing entity #{spec[:entity]}".color(:red)
-        puts e.message
-      end
+      entity = Entity.new(spec[:entity], {
+        :file => spec[:file],
+        :fields => spec[:fields] && spec[:fields].map {|field_spec| Field.parse(field_spec)}
+      })
     end
 
     def initialize(name, options)
-      raise Es::IncorrectSpecificationError.new("Entity name is not specified.") if name.nil?
-      raise Es::IncorrectSpecificationError.new("Entity name should be a string.") unless name.is_a?(String)
-      raise Es::IncorrectSpecificationError.new("Entity name should not be empty.") if name.strip.empty?
-      raise Es::IncorrectSpecificationError.new("File is not specified.") if options[:file].nil?
-      raise Es::IncorrectSpecificationError.new("File should be a string.") unless options[:file].is_a?(String)
-      raise Es::IncorrectSpecificationError.new("Fields are not specified.") if options[:fields].nil?
-      raise Es::IncorrectSpecificationError.new("Entity should contain at least one field.") if options[:fields].empty?
+      fail Es::IncorrectSpecificationError.new("Entity name is not specified.") if name.nil?
+      fail Es::IncorrectSpecificationError.new("Entity name should be a string.") unless name.is_a?(String)
+      fail Es::IncorrectSpecificationError.new("Entity name should not be empty.") if name.strip.empty?
+      fail Es::IncorrectSpecificationError.new("File is not specified.") if options[:file].nil?
+      fail Es::IncorrectSpecificationError.new("File should be a string.") unless options[:file].is_a?(String)
+      fail Es::IncorrectSpecificationError.new("Fields are not specified.") if options[:fields].nil?
+      fail Es::IncorrectSpecificationError.new("Entity should contain at least one field.") if options[:fields].empty?
+      fail Es::IncorrectSpecificationError.new("Entity should contain at least one recordid field.") if !options[:fields].any? {|f| f.is_recordid?}
+
       @name = name
       @fields = options[:fields]
       @file = options[:file]
@@ -221,7 +211,7 @@ module Es
       else
         @timeframes = options[:timeframe]
       end
-      raise Es::IncorrectSpecificationError.new("Entity #{name} should not contain multiple fields with the same name.") if has_multiple_same_fields?
+      fail Es::IncorrectSpecificationError.new("Entity #{name} should not contain multiple fields with the same name.") if has_multiple_same_fields?
     end
 
     def has_multiple_same_fields?
@@ -324,8 +314,8 @@ module Es
     FIELD_TYPES = [ATTRIBUTE_TYPE, RECORDID_TYPE, DATE_TYPE, TIME_TYPE, FACT_TYPE, TIMESTAMP_TYPE, AUTOINCREMENT_TYPE, SNAPSHOT_TYPE, HID_TYPE, HISTORIC_TYPE, DURATION_TYPE, VELOCITY_TYPE, IS_DELETED_TYPE]
 
     def self.parse(spec)
-      raise InsufficientSpecificationError.new("Field specification is empty") if spec.nil?
-      raise InsufficientSpecificationError.new("Field specification is should be an object") unless spec.is_a?(Hash)
+      fail InsufficientSpecificationError.new("Field specification is empty") if spec.nil?
+      fail InsufficientSpecificationError.new("Field specification is should be an object") unless spec.is_a?(Hash)
       Field.new(spec[:name], spec[:type])
     end
 
@@ -356,9 +346,9 @@ module Es
     end
 
     def initialize(name, type)
-      raise Es::IncorrectSpecificationError.new("The field name \"#{name.bright}\" does not have type specified. Type should be one of [#{FIELD_TYPES.join(', ')}]") if type.nil?
-      raise Es::IncorrectSpecificationError.new("The type of field name \"#{name.bright}\" should be a string.") unless type.is_a?(String)
-      raise Es::IncorrectSpecificationError.new("The field name \"#{name.bright}\" does have wrong type specified. Specified \"#{type.bright}\" should be one of [#{FIELD_TYPES.join(', ')}]") unless FIELD_TYPES.include?(type) || type == "none"
+      fail Es::IncorrectSpecificationError.new("The field name \"#{name.bright}\" does not have type specified. Type should be one of [#{FIELD_TYPES.join(', ')}]") if type.nil?
+      fail Es::IncorrectSpecificationError.new("The type of field name \"#{name.bright}\" should be a string.") unless type.is_a?(String)
+      fail Es::IncorrectSpecificationError.new("The field name \"#{name.bright}\" does have wrong type specified. Specified \"#{type.bright}\" should be one of [#{FIELD_TYPES.join(', ')}]") unless FIELD_TYPES.include?(type) || type == "none"
       @name = name
       @type = type
     end

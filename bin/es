@@ -40,7 +40,7 @@ switch [:l,:logger]
 
 desc 'GD server'
 arg_name 'server'
-switch [:s,:server]
+flag [:s,:server]
 
 desc 'Creates ES'
 command :create do |c|
@@ -483,11 +483,12 @@ post do |global,command,options,args|
 end
 
 on_error do |exception|
-  pp exception.backtrace
+  # pp exception.backtrace
   if exception.is_a?(SystemExit) && exception.status == 0
     false
   else
-    true
+    puts exception.message.color(:red)
+    false
   end
   
   # Error logic here
