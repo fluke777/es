@@ -19,7 +19,6 @@ require 'gooddata'
 require 'pp'
 require 'logger'
 require 'es'
-require 'ostruct'
 require 'date'
 require 'chronic'
 require 'fastercsv'
@@ -41,6 +40,11 @@ switch [:l,:logger]
 desc 'GD server'
 arg_name 'server'
 flag [:s,:server]
+
+desc 'WEBDAV server'
+arg_name 'webdav'
+flag [:w,:webdav]
+
 
 desc 'Creates ES'
 command :create do |c|
@@ -467,8 +471,12 @@ pre do |global,command,options,args|
 
   GoodData.logger = Logger.new(STDOUT) if global[:logger]
   GD_SERVER = global[:server]
+  GD_WEBDAV = global[:webdav]
   begin
-    GoodData.connect LOGIN, PASSWORD, GD_SERVER, 0
+    GoodData.connect LOGIN, PASSWORD, GD_SERVER, {
+      :timeout       => 60,
+      :webdav_server => GD_WEBDAV
+    }
   rescue RestClient::BadRequest => e
     puts "Login Failed"
     exit 1

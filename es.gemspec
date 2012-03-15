@@ -19,7 +19,7 @@ spec = Gem::Specification.new do |s|
   s.add_development_dependency('rake')
   s.add_development_dependency('rdoc')
   s.add_dependency('gli')
-  s.add_dependency('gooddata', '>= 0.5.3')
+  s.add_dependency('gooddata', '>= 0.5.4')
   s.add_dependency('jsonify')
   s.add_dependency('chronic')
   s.add_dependency('rainbow')
