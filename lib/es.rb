@@ -201,7 +201,7 @@ module Es
       fail Es::IncorrectSpecificationError.new("File should be a string.") unless options[:file].is_a?(String)
       fail Es::IncorrectSpecificationError.new("Fields are not specified.") if options[:fields].nil?
       fail Es::IncorrectSpecificationError.new("Entity should contain at least one field.") if options[:fields].empty?
-      fail Es::IncorrectSpecificationError.new("Entity should contain at least one recordid field.") if !options[:fields].any? {|f| f.is_recordid?}
+      # fail Es::IncorrectSpecificationError.new("Entity should contain at least one recordid field.") if !options[:fields].any? {|f| f.is_recordid?}
 
       @name = name
       @fields = options[:fields]
@@ -215,7 +215,8 @@ module Es
     end
 
     def has_multiple_same_fields?
-      fields.uniq_by {|s| s.name}.count != fields.count
+      fields_without = fields.find_all {|f| !f.is_recordid? && f.type != Field::TIMESTAMP_TYPE}
+      fields_without.uniq_by {|s| s.name}.count != fields_without.count
     end
 
     def to_extract_fragment(pid, options = {})
