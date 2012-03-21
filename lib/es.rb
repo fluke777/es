@@ -79,6 +79,10 @@ module Es
         fields = entity_spec[:fields].map do |field|
           if load_entity.has_field?(field)
             load_entity.get_field(field)
+          elsif field == "DeletedAt"
+            Es::Field.new("DeletedAt", "time")
+          elsif field == "IsDeleted"
+            Es::Field.new("IsDeleted", "attribute")
           elsif field == "snapshot"
             Es::SnapshotField.new("snapshot", "snapshot")
           elsif field == "autoincrement"
