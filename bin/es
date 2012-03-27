@@ -111,6 +111,7 @@ command :load do |c|
 
       load.entities.each do |entity|
         next if options[:only] && entity.name != options[:only]
+        next unless Es::Helpers.has_more_lines?(entity.file)
         web_dav_file = Es::Helpers.load_destination_dir(PID, entity) + '/' + Es::Helpers.destination_file(entity)
         if options[:verbose]
           puts "Entity #{entity.name}".bright
@@ -147,6 +148,7 @@ command :load_deleted do |c|
     load = Es::Load.parse(load_config)
     
     load.entities.each do |entity|
+      next unless Es::Helpers.has_more_lines?(entity.file)
       source_dir = File.dirname(entity.file)
       deleted_filename = Es::Helpers.destination_file(entity, :deleted => true)
       deleted_source = "#{source_dir}/#{deleted_filename}"

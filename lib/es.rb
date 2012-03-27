@@ -552,6 +552,12 @@ module Es
   module Helpers
     TEMPLATE_DIR = "./lib/templates"
 
+    def self.has_more_lines?(path)
+      lines_count = `"#{path} wc -l"`
+      lines_count > 0
+    end
+
+
     def self.load_config(filename, validate=true)
         json = File.new(filename, 'r')
           parser = Yajl::Parser.new(:symbolize_keys => true)
