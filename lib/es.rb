@@ -553,8 +553,8 @@ module Es
     TEMPLATE_DIR = "./lib/templates"
 
     def self.has_more_lines?(path)
-      lines_count = `"#{path} wc -l"`
-      lines_count > 0
+      lines_count = `"wc -l #{path}"`
+      lines_count.to_i > 0
     end
 
 
