@@ -6,7 +6,7 @@ PATH
       chronic
       fastercsv
       gli
-      gooddata (>= 0.5.3)
+      gooddata (>= 0.5.4)
       i18n
       jsonify
       pry
@@ -17,7 +17,7 @@ PATH
 PATH
   remote: ../gooddata-ruby
   specs:
-    gooddata (0.5.3)
+    gooddata (0.5.4)
       fastercsv
       json
       json_pure
@@ -41,7 +41,7 @@ GEM
       multi_json (~> 1.0)
     method_source (0.7.1)
     mime-types (1.17.2)
-    multi_json (1.0.4)
+    multi_json (1.1.0)
     parseconfig (0.5.2)
     pry (0.9.8.2)
       coderay (~> 1.0.5)

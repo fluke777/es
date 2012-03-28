@@ -148,12 +148,11 @@ command :load_deleted do |c|
     load = Es::Load.parse(load_config)
     
     load.entities.each do |entity|
-      next unless Es::Helpers.has_more_lines?(entity.file)
       source_dir = File.dirname(entity.file)
       deleted_filename = Es::Helpers.destination_file(entity, :deleted => true)
       deleted_source = "#{source_dir}/#{deleted_filename}"
       next unless File.exist? deleted_source
-
+      next unless Es::Helpers.has_more_lines?(deleted_source)
       e = Es::Entity.new(entity.name, {
         :file   => deleted_source,
         :fields => [

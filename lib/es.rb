@@ -553,10 +553,15 @@ module Es
     TEMPLATE_DIR = "./lib/templates"
 
     def self.has_more_lines?(path)
-      lines_count = `"wc -l #{path}"`
-      lines_count.to_i > 0
+      counter = 0
+      File.open(path, "r") do |infile|
+        while (line = infile.gets)
+          counter += 1
+          break if counter > 2
+        end
+      end
+      counter > 1
     end
-
 
     def self.load_config(filename, validate=true)
         json = File.new(filename, 'r')
