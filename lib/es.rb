@@ -72,7 +72,7 @@ module Es
 
     def self.parse(spec, a_load)
       global_timeframe = parse_timeframes(spec[:timeframes]) || parse_timeframes("latest")
-      
+      timezone = spec[:timezone]
       parsed_entities = spec[:entities].map do |entity_spec|
         entity_name = entity_spec[:entity]
         load_entity = a_load.get_merged_entity_for(entity_name)
@@ -105,7 +105,8 @@ module Es
         Entity.new(entity_name, {
           :fields => fields,
           :file   => entity_spec[:file],
-          :timeframe => parsed_timeframe || global_timeframe || (fail "Timeframe has to be defined")
+          :timeframe => parsed_timeframe || global_timeframe || (fail "Timeframe has to be defined"),
+          :timezone => timezone
         })
       end
 
@@ -188,7 +189,7 @@ module Es
   end
 
   class Entity
-    attr_accessor :name, :fields, :file, :timeframes
+    attr_accessor :name, :fields, :file, :timeframes, :timezone
 
     def self.parse(spec)
       entity = Entity.new(spec[:entity], {
@@ -215,6 +216,7 @@ module Es
       else
         @timeframes = options[:timeframe]
       end
+      @timezone = options[:timezone] || 'UTC'
       fail Es::IncorrectSpecificationError.new("Entity #{name} should not contain multiple fields with the same name.") if has_multiple_same_fields?
     end
 
@@ -238,7 +240,7 @@ module Es
 
       d = ActiveSupport::OrderedHash.new
       d['entity'] = name
-      d['timezone'] = 'UTC'
+      d['timezone'] = timezone
       d['readMap'] = (pretty ? read_map : read_map.to_json)
       d['computedStreams'] = '[{"type":"computed","ops":[]}]'
       d['timeFrames'] = (timeframes.map{|t| t.to_extract_fragment(pid, options)})
