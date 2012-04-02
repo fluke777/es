@@ -92,7 +92,6 @@ command :load do |c|
   c.flag [:b, :basedir]
 
   c.action do |global_options,options,args|
-
     filenames = args
     base_dir = options[:basedir]
     if base_dir.nil?
@@ -104,8 +103,7 @@ command :load do |c|
 
     # for each config file
     filenames.each do |filename|
-      fail "File #{args.first} cannot be found" unless File.exist?(filename)
-    
+      fail "File #{filename} cannot be found" unless File.exist?(filename)
       load_config_file = Es::Helpers.load_config(filename)
       load = Es::Load.parse(load_config_file)
 
@@ -332,53 +330,64 @@ command :generate_base do |c|
   end
 end
 
-desc 'Truncate entity'
+desc 'Truncate entity. Truncation means that you specify a time all events in that entit larger than the time will be thrown away.'
 command :truncate do |c|
   
   c.desc 'Name of the entity.'
   c.default_value nil
   c.flag [:e, :entity]
 
-  c.desc 'Timestamp in epoch.'
+  c.desc 'Timestamp in epoch to which the ES will be truncated.'
   c.default_value nil
   c.flag [:t, :timestamp]
 
-  c.desc 'Base config filename.'
+  c.desc 'Base files directory. If specified it will ignore specific files and it will pick up all files in this directory with pattern load*.json'
   c.default_value nil
-  c.flag [:b, :base]
+  c.flag [:b, :basedir]
 
   c.action do |global_options,options,args|
     entity_name = options[:entity]
     timestamp = options[:timestamp]
-    base_filename = options[:base]
+    filenames = args
 
-    fail "You need to specify entity name" if entity_name.nil?
-    fail "You need to specify timestamp" if timestamp.nil?
-    fail "You need to specify base filename" if base_filename.nil?
+    base_dir = options[:basedir]
+    if base_dir.nil?
+      # fail "You need to specify entity name" if entity_name.nil?
+      fail "You need to specify timestamp" if timestamp.nil?
+      fail "You need to specify base filename" if filenames.empty?
+    else
+      # puts "would grab files like this #{"#{base_dir}/load*.json"}"
+      filenames = Dir::glob("#{base_dir}/load*.json")
+    end
 
-    base_config_file = Es::Helpers.load_config(base_filename)
-    base = Es::Load.parse(base_config_file)
+    filenames.each do |base_filename|
 
-    entity = base.get_entity(entity_name)
-    fail "There is no entity named \"#{entity_name}\"" if entity.nil?
+      base_config_file = Es::Helpers.load_config(base_filename)
+      base = Es::Load.parse(base_config_file)
 
-     begin
-        data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/truncateTasks", {
-          :truncateTask => {
-            :entity     => entity_name,
-            :timestamp  => timestamp.to_i
+      base.entities.each do |entity|
+
+        next if !entity_name.nil? and entity_name != entity.name
+
+        begin
+          data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/truncateTasks", {
+            :truncateTask => {
+              :entity     => entity.name,
+              :timestamp  => timestamp.to_i
+            }
           }
-        }
-      rescue RestClient::BadRequest => e
-        puts e.inspect
-        exit 1
-      end
-      link = data["asyncTask"]["link"]["poll"]
-      response = GoodData.get(link, :process => false)
-      while response.code != 204
-        sleep 10
+        rescue RestClient::BadRequest => e
+          puts e.inspect
+          exit 1
+        end
+        link = data["asyncTask"]["link"]["poll"]
         response = GoodData.get(link, :process => false)
+        while response.code != 204
+          sleep 10
+          response = GoodData.get(link, :process => false)
+        end
       end
+    end
   end
 end
 
