@@ -97,8 +97,8 @@ command :load do |c|
     if base_dir.nil?
       fail "Provide path to the loading configuration as a first argument" if filenames.empty?
     else
-      # puts "would grab files like this #{"#{base_dir}/json*.json"}"
-      filenames = Dir::glob("#{base_dir}/load*.json")
+      # puts "would grab files like this #{"#{base_dir}/gen_json*.json"}"
+      filenames = Dir::glob("#{base_dir}/gen_load*.json")
     end
 
     # for each config file
@@ -220,9 +220,9 @@ command :extract do |c|
       fail "Provide path to the extract configuration as a second argument" if args[1].nil?
       extract_config_files = [args[1]]
     else
-      # puts "would grab files like this #{"#{base_dir}/json*.json"}"
-      load_config_files = Dir::glob("#{base_dir}/load*.json")
-      extract_config_files = Dir::glob("#{base_dir}/extract*.json")
+      # puts "would grab files like this #{"#{base_dir}/gen_json*.json"}"
+      load_config_files = Dir::glob("#{base_dir}/gen_load*.json")
+      extract_config_files = Dir::glob("#{base_dir}/gen_extract*.json")
     end
 
     # build one giant load config
@@ -356,8 +356,8 @@ command :truncate do |c|
       fail "You need to specify timestamp" if timestamp.nil?
       fail "You need to specify base filename" if filenames.empty?
     else
-      # puts "would grab files like this #{"#{base_dir}/load*.json"}"
-      filenames = Dir::glob("#{base_dir}/load*.json")
+      # puts "would grab files like this #{"#{base_dir}/gen_load*.json"}"
+      filenames = Dir::glob("#{base_dir}/gen_load*.json")
     end
 
     filenames.each do |base_filename|
