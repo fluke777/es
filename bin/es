@@ -136,48 +136,65 @@ end
 
 desc 'Load Deleted Records'
 command :load_deleted do |c|
+
+  c.desc 'Base files directory. If specified it will ignore specific files and it will pick up all files in this directory with pattern load*.json'
+  c.default_value nil
+  c.flag [:b, :basedir]
+
   c.action do |global_options,options,args|
 
-    load_config_file = args.first
-    fail "Provide path to the loading configuration as a first argument" if load_config_file.nil?
-    fail "File #{args.fail} cannot be found" unless File.exist?(load_config_file)
-    
-    load_config = Es::Helpers.load_config(load_config_file)
-    load = Es::Load.parse(load_config)
-    
-    load.entities.each do |entity|
-      source_dir = File.dirname(entity.file)
-      deleted_filename = Es::Helpers.destination_file(entity, :deleted => true)
-      deleted_source = "#{source_dir}/#{deleted_filename}"
-      next unless File.exist? deleted_source
-      next unless Es::Helpers.has_more_lines?(deleted_source)
-      e = Es::Entity.new(entity.name, {
-        :file   => deleted_source,
-        :fields => [
-          Es::Field.new('Id', 'recordid'),
-          Es::Field.new('Timestamp', 'timestamp'),
-          Es::Field.new('IsDeleted', 'attribute')
-        ]
-      })
-      e.load(PID)
+    filenames = args
+    base_dir = options[:basedir]
+    if base_dir.nil?
+      fail "Provide path to the loading configuration as a first argument" if filenames.empty?
+    else
+      puts "would grab files like this #{"#{base_dir}/gen_load*.json"}"
+      filenames = Dir::glob("#{base_dir}/gen_load*.json")
+    end
 
-      deleted_with_time = "#{source_dir}/#{deleted_filename}".gsub(/\.csv$/, '_del.csv')
-      FasterCSV.open(deleted_with_time, 'w') do |csv|
-        csv << ['Id', 'Timestamp', 'DeletedAt']
-        FasterCSV.foreach("#{source_dir}/#{deleted_filename}", :headers => true, :return_headers => false) do |row|
-          csv << row.values_at('Id', 'Timestamp', 'Timestamp')
+    # load_config_file = args.first
+    # fail "Provide path to the loading configuration as a first argument" if load_config_file.nil?
+    # fail "File #{args.fail} cannot be found" unless File.exist?(load_config_file)
+    
+    filenames.each do |load_config_file|
+      load_config = Es::Helpers.load_config(load_config_file)
+      load = Es::Load.parse(load_config)
+    
+      load.entities.each do |entity|
+        source_dir = File.dirname(entity.file)
+        deleted_filename = Es::Helpers.destination_file(entity, :deleted => true)
+        deleted_source = "#{source_dir}/#{deleted_filename}"
+        binding.pry
+        next unless File.exist? deleted_source
+        next unless Es::Helpers.has_more_lines?(deleted_source)
+        e = Es::Entity.new(entity.name, {
+          :file   => deleted_source,
+          :fields => [
+            Es::Field.new('Id', 'recordid'),
+            Es::Field.new('Timestamp', 'timestamp'),
+            Es::Field.new('IsDeleted', 'attribute')
+          ]
+        })
+        e.load(PID)
+
+        deleted_with_time = "#{source_dir}/#{deleted_filename}".gsub(/\.csv$/, '_del.csv')
+        FasterCSV.open(deleted_with_time, 'w') do |csv|
+          csv << ['Id', 'Timestamp', 'DeletedAt']
+          FasterCSV.foreach("#{source_dir}/#{deleted_filename}", :headers => true, :return_headers => false) do |row|
+            csv << row.values_at('Id', 'Timestamp', 'Timestamp')
+          end
         end
-      end
 
-      e1 = Es::Entity.new(entity.name, {
-        :file   => deleted_with_time,
-        :fields => [
-          Es::Field.new('Id', 'recordid'),
-          Es::Field.new('Timestamp', 'timestamp'),
-          Es::Field.new('DeletedAt', 'time')
-        ]
-      })
-      e1.load(PID)
+        e1 = Es::Entity.new(entity.name, {
+          :file   => deleted_with_time,
+          :fields => [
+            Es::Field.new('Id', 'recordid'),
+            Es::Field.new('Timestamp', 'timestamp'),
+            Es::Field.new('DeletedAt', 'time')
+          ]
+        })
+        e1.load(PID)
+      end
     end
   end
 end
