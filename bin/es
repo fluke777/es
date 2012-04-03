@@ -148,13 +148,9 @@ command :load_deleted do |c|
     if base_dir.nil?
       fail "Provide path to the loading configuration as a first argument" if filenames.empty?
     else
-      puts "would grab files like this #{"#{base_dir}/gen_load*.json"}"
+      # puts "would grab files like this #{"#{base_dir}/gen_load*.json"}"
       filenames = Dir::glob("#{base_dir}/gen_load*.json")
     end
-
-    # load_config_file = args.first
-    # fail "Provide path to the loading configuration as a first argument" if load_config_file.nil?
-    # fail "File #{args.fail} cannot be found" unless File.exist?(load_config_file)
     
     filenames.each do |load_config_file|
       load_config = Es::Helpers.load_config(load_config_file)
@@ -164,7 +160,6 @@ command :load_deleted do |c|
         source_dir = File.dirname(entity.file)
         deleted_filename = Es::Helpers.destination_file(entity, :deleted => true)
         deleted_source = "#{source_dir}/#{deleted_filename}"
-        binding.pry
         next unless File.exist? deleted_source
         next unless Es::Helpers.has_more_lines?(deleted_source)
         e = Es::Entity.new(entity.name, {
