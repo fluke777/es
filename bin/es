@@ -232,7 +232,6 @@ command :extract do |c|
       fail "Provide path to the extract configuration as a second argument" if args[1].nil?
       extract_config_files = [args[1]]
     else
-      # puts "would grab files like this #{"#{base_dir}/gen_json*.json"}"
       load_config_files = Dir::glob("#{base_dir}/gen_load*.json")
       extract_config_files = Dir::glob("#{base_dir}/gen_extract*.json")
     end
@@ -271,19 +270,23 @@ command :extract do |c|
         else
           begin
             data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/readTasks", entity.to_extract_fragment(PID, :pretty => false).to_json
-          rescue RestClient::BadRequest => e
-            puts e.inspect
+            link = data["asyncTask"]["link"]["poll"]
+            response = GoodData.get(link, :process => false)
+            while response.code != 204
+              sleep 10
+              response = GoodData.get(link, :process => false)
+            end
+            puts "Done downloading"
+            web_dav_file = Es::Helpers.extract_destination_dir(PID, entity) + '/' + Es::Helpers.destination_file(entity)
+            puts "Grabbing from web dav"
+            GoodData.connection.download web_dav_file, entity.file
+            puts "Done" if options[:verbose]
+          rescue RestClient::RequestFailed => error
+            parser = Yajl::Parser.new(:symbolize_keys => true)
+            doc = parser.parse(error.response)
+            pp doc
             exit 1
           end
-          link = data["asyncTask"]["link"]["poll"]
-          response = GoodData.get(link, :process => false)
-          while response.code != 204
-            sleep 10
-            response = GoodData.get(link, :process => false)
-          end
-          web_dav_file = Es::Helpers.extract_destination_dir(PID, entity) + '/' + Es::Helpers.destination_file(entity)
-          GoodData.connection.download web_dav_file, entity.file
-          puts "Done" if options[:verbose]
         end
       end
     end

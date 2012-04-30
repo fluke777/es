@@ -289,13 +289,20 @@ module Es
     end
 
     def load(pid)
-      GoodData.connection.upload file, Es::Helpers.load_destination_dir(pid, self)
-      data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{ES_NAME}/uploadTasks", to_load_fragment(pid).to_json
-      link = data["asyncTask"]["link"]["poll"]
-      response = GoodData.get(link, :process => false)
-      while response.code != 204
-        sleep 10
+      begin
+        GoodData.connection.upload file, Es::Helpers.load_destination_dir(pid, self)
+        data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{ES_NAME}/uploadTasks", to_load_fragment(pid).to_json
+        link = data["asyncTask"]["link"]["poll"]
         response = GoodData.get(link, :process => false)
+        while response.code != 204
+          sleep 10
+          response = GoodData.get(link, :process => false)
+        end
+      rescue RestClient::RequestFailed => error
+        parser = Yajl::Parser.new(:symbolize_keys => true)
+        doc = parser.parse(error.response)
+        pp doc
+        exit 1
       end
     end
   end
