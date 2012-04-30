@@ -233,7 +233,7 @@ command :extract do |c|
       extract_config_files = [args[1]]
     else
       load_config_files = Dir::glob("#{base_dir}/gen_load*.json")
-      extract_config_files = Dir::glob("#{base_dir}/gen_extract*.json")
+      extract_config_files = Dir::glob("#{extract_dir}/gen_extract*.json")
     end
 
     # build one giant load config
