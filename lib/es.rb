@@ -317,10 +317,10 @@ module Es
       fields << field
     end
 
-    def load(pid)
+    def load(pid, es_name)
       begin
         GoodData.connection.upload file, Es::Helpers.load_destination_dir(pid, self)
-        data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{ES_NAME}/uploadTasks", to_load_fragment(pid).to_json
+        data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/uploadTasks", to_load_fragment(pid).to_json
         link = data["asyncTask"]["link"]["poll"]
         response = GoodData.get(link, :process => false)
         while response.code != 204
@@ -334,12 +334,33 @@ module Es
         exit 1
       end
     end
-  end
 
+    def truncate(pid, es_name)
+      begin
+        data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/truncateTasks", {
+          :truncateTask => {
+            :entity     => entity.name,
+            :timestamp  => timestamp.to_i
+          }
+        }
+      rescue RestClient::BadRequest => e
+        puts e.inspect
+        exit 1
+      end
+      link = data["asyncTask"]["link"]["poll"]
+      response = GoodData.get(link, :process => false)
+      while response.code != 204
+        sleep 10
+        response = GoodData.get(link, :process => false)
+      end
+    end
+      
+  end 
+      
 # Fields
-
+      
   class Field
-
+      
     ATTRIBUTE_TYPE      = "attribute"
     RECORDID_TYPE       = "recordid"
     DATE_TYPE           = "date"

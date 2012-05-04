@@ -49,19 +49,20 @@ flag [:w,:webdav]
 desc 'Creates ES'
 command :create do |c|
   c.action do |global_options,options,args|
-    begin
-      GoodData.post "/gdc/projects/#{PID}/eventStore/stores", {:store => {:storeId => ES_NAME}}
-    rescue RestClient::BadRequest
-      puts "Seems like eventstore with name #{ES_NAME} already exists"
-      exit 1
-    end
+    Commands::create({
+      :pid        = PID,
+      :es_name    = ES_NAME
+    })
   end
 end
 
 desc 'Delete ES'
 command :delete do |c|
   c.action do |global_options,options,args|
-    GoodData.delete "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}"
+    Commands::delete({
+      :pid      => PID,
+      :es_name  => ES_NAME
+    })
   end
 end
 
@@ -69,7 +70,7 @@ end
 desc 'Show all types that are supported.'
 command :types do |c|
   c.action do |global_options,options,args|
-    Es::Field::FIELD_TYPES.each {|t| puts t}
+    Commands::get_types.each {|t| puts t}
   end
 end
 
@@ -92,47 +93,13 @@ command :load do |c|
   c.flag [:b, :basedir]
 
   c.action do |global_options,options,args|
-    filenames = args
-    base_dir = options[:basedir]
-    if base_dir.nil?
-      fail "Provide path to the loading configuration as a first argument" if filenames.empty?
-    else
-      # puts "would grab files like this #{"#{base_dir}/gen_json*.json"}"
-      filenames = Dir::glob("#{base_dir}/gen_load*.json")
-    end
-
-    # for each config file
-    filenames.each do |filename|
-      fail "File #{filename} cannot be found" unless File.exist?(filename)
-      load_config_file = Es::Helpers.load_config(filename)
-      load = Es::Load.parse(load_config_file)
-
-      load.entities.each do |entity|
-        next if options[:only] && entity.name != options[:only]
-        next unless Es::Helpers.has_more_lines?(entity.file)
-        web_dav_file = Es::Helpers.load_destination_dir(PID, entity) + '/' + Es::Helpers.destination_file(entity)
-        if options[:verbose]
-          puts "Entity #{entity.name}".bright
-          puts "Configuration from #{filename}"
-          puts "Will load from #{entity.file} to #{web_dav_file}"
-          puts JSON::pretty_generate(entity.to_load_fragment(PID))
-        end
-        if options[:j]
-          puts "Entity #{entity.name}".bright unless options[:verbose]
-          puts "load the file #{entity.file} to destination #{web_dav_file} and run the specified as the task"
-          puts "======= Load JSON start"
-          puts entity.to_load_fragment(PID).to_json.color(:blue)
-          puts "======= Load JSON end"
-          puts
-        else
-          entity.load(PID)
-          puts "Done" if options[:verbose]
-        end
-      end
-    end
+    options[:filenames] = args
+    options[:pattern]   = "gen_load*.json"
+    options[:pid]       = PID
+    options[:es_name]   = ES_NAME
+    Commands::load(options)
   end
 end
-
 
 desc 'Load Deleted Records'
 command :load_deleted do |c|
@@ -146,53 +113,9 @@ command :load_deleted do |c|
   c.flag [:c, :compatibility]
 
   c.action do |global_options,options,args|
-
-    filenames = args
-    base_dir = options[:basedir]
-    if base_dir.nil?
-      fail "Provide path to the loading configuration as a first argument" if filenames.empty?
-    else
-      # puts "would grab files like this #{"#{base_dir}/gen_load*.json"}"
-      filenames = Dir::glob("#{base_dir}/gen_load*.json")
-    end
-    
-    compatibility_mode = options[:compatibility]
-    
-    filenames.each do |load_config_file|
-      load_config = Es::Helpers.load_config(load_config_file)
-      load = Es::Load.parse(load_config)
-    
-      load.entities.each do |entity|
-        source_dir = File.dirname(entity.file)
-        deleted_filename = Es::Helpers.destination_file(entity, :deleted => true)
-        deleted_source = "#{source_dir}/#{deleted_filename}"
-        next unless File.exist? deleted_source
-        next unless Es::Helpers.has_more_lines?(deleted_source)
-
-        e = Es::Entity.create_deleted_entity(entity.name, :compatibility_mode => compatibility_mode, :file => deleted_source)
-        e.load(PID)
-
-        if !compatibility_mode
-          deleted_with_time = "#{source_dir}/#{deleted_filename}".gsub(/\.csv$/, '_del.csv')
-          FasterCSV.open(deleted_with_time, 'w') do |csv|
-            csv << ['Id', 'Timestamp', 'DeletedAt']
-            FasterCSV.foreach("#{source_dir}/#{deleted_filename}", :headers => true, :return_headers => false) do |row|
-              csv << row.values_at('Id', 'Timestamp', 'Timestamp')
-            end
-          end
-
-          e1 = Es::Entity.new(entity.name, {
-            :file   => deleted_with_time,
-            :fields => [
-              Es::Field.new('Id', 'recordid'),
-              Es::Field.new('Timestamp', 'timestamp'),
-              Es::Field.new('DeletedAt', 'time')
-            ]
-          })
-          e1.load(PID)
-        end
-      end
-    end
+    options[:filenames] = args
+    options[:pattern] = "gen_load*.json"
+    Commands::load_deleted(options)
   end
 end
 
@@ -225,73 +148,11 @@ command :extract do |c|
   
 
   c.action do |global_options,options,args|
-    base_dir = options[:basedir]
-    extract_dir = options[:extractdir]
-
-    if base_dir.nil? && extract_dir.nil?
-      fail "Provide path to the loading configuration as a first argument" if args.first.nil?
-      load_config_files = [args.first]
-      fail "Provide path to the extract configuration as a second argument" if args[1].nil?
-      extract_config_files = [args[1]]
-    else
-      load_config_files = Dir::glob("#{base_dir}/gen_load*.json")
-      extract_config_files = Dir::glob("#{extract_dir}/gen_extract*.json")
-    end
-
-    # build one giant load config
-    load_entities = load_config_files.reduce([]) do |memo, filename|
-      fail "File #{filename} cannot be found" unless File.exist?(filename)
-      load_config = Es::Helpers.load_config(filename)
-      load = Es::Load.parse(load_config)
-      memo.concat(load.entities)
-    end
-    hyper_load = Es::Load.new(load_entities)
-
-    extract_config_files.each do |extract_config_file|
-      fail "File #{extract_config_file} cannot be found" unless File.exist?(extract_config_file)
-      extract_config = Es::Helpers.load_config(extract_config_file)
-      extract = Es::Extract.parse(extract_config, hyper_load)
-
-      extract.entities.each do |entity|
-        next if options[:only] && entity.name != options[:only]
-        # pp extract.to_extract_fragment(PID)
-
-        if options[:verbose] || options[:json] || options[:debug] then
-          puts "Entity #{entity.name.bright}" 
-          puts "Config from #{load_config_files.join(', ')} and #{extract_config_file}"
-        end
-
-        puts JSON.pretty_generate(entity.to_extract_fragment(PID)) if options[:debug]
-
-        if options[:json]
-          # puts "load the file #{entity.file} to destination #{web_dav_file} and run the specified as the task"
-          puts "======= Extract JSON start"
-          puts entity.to_extract_fragment(PID, :pretty => false).to_json.color(:blue)
-          puts "======= Extract JSON end"
-          puts
-        else
-          begin
-            data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/readTasks", entity.to_extract_fragment(PID, :pretty => false).to_json
-            link = data["asyncTask"]["link"]["poll"]
-            response = GoodData.get(link, :process => false)
-            while response.code != 204
-              sleep 10
-              response = GoodData.get(link, :process => false)
-            end
-            puts "Done downloading"
-            web_dav_file = Es::Helpers.extract_destination_dir(PID, entity) + '/' + Es::Helpers.destination_file(entity)
-            puts "Grabbing from web dav"
-            GoodData.connection.download web_dav_file, entity.file
-            puts "Done" if options[:verbose]
-          rescue RestClient::RequestFailed => error
-            parser = Yajl::Parser.new(:symbolize_keys => true)
-            doc = parser.parse(error.response)
-            pp doc
-            exit 1
-          end
-        end
-      end
-    end
+    base_dir          = options[:basedir]
+    extract_dir       = options[:extractdir]
+    options[:pid]     = PID
+    options[:es_name] = ES_NAME
+    Commands::extract(options)
   end
 end
 
@@ -419,48 +280,11 @@ command :truncate do |c|
   c.flag [:b, :basedir]
 
   c.action do |global_options,options,args|
-    entity_name = options[:entity]
-    timestamp = options[:timestamp]
-    filenames = args
-
-    base_dir = options[:basedir]
-    if base_dir.nil?
-      # fail "You need to specify entity name" if entity_name.nil?
-      fail "You need to specify timestamp" if timestamp.nil?
-      fail "You need to specify base filename" if filenames.empty?
-    else
-      # puts "would grab files like this #{"#{base_dir}/gen_load*.json"}"
-      filenames = Dir::glob("#{base_dir}/gen_load*.json")
-    end
-
-    filenames.each do |base_filename|
-
-      base_config_file = Es::Helpers.load_config(base_filename)
-      base = Es::Load.parse(base_config_file)
-
-      base.entities.each do |entity|
-
-        next if !entity_name.nil? and entity_name != entity.name
-
-        begin
-          data = GoodData.post "/gdc/projects/#{PID}/eventStore/stores/#{ES_NAME}/truncateTasks", {
-            :truncateTask => {
-              :entity     => entity.name,
-              :timestamp  => timestamp.to_i
-            }
-          }
-        rescue RestClient::BadRequest => e
-          puts e.inspect
-          exit 1
-        end
-        link = data["asyncTask"]["link"]["poll"]
-        response = GoodData.get(link, :process => false)
-        while response.code != 204
-          sleep 10
-          response = GoodData.get(link, :process => false)
-        end
-      end
-    end
+    options[:load_filenames]  = args
+    options[:pid]             = PID
+    options[:es_name]         = ES_NAME
+    options[:basedir_pattern] = "gen_load*.json"
+    Commands.truncate(options)
   end
 end
 
@@ -526,7 +350,7 @@ command :load_column do |c|
     puts "Added field #{field.name}" if options[:verbose]
     base.to_config_file(base_filename)
     
-    load.entities.first.load(PID)
+    load.entities.first.load(PID, ES_NAME)
   end
 end
 
