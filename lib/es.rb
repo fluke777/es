@@ -24,22 +24,23 @@ module Es
     DAY_WITHIN_PERIOD = [:first, :last]
     attr_accessor :to, :from, :interval_unit, :interval, :day_within_period, :spec_from, :spec_to
 
-    def self.parse(spec)
+    def self.parse(spec, options={})
       if spec == 'latest' then
         Timeframe.new({
           :to => 'today',
           :from => 'yesterday'
-        })
+        }, options)
       else
-        Timeframe.new(spec)
+        Timeframe.new(spec, options)
       end
     end
 
-    def initialize(spec)
+    def initialize(spec, options={})
       validate_spec(spec)
+      @now = options[:now] || Time.now
       @spec = spec
-      @to = Chronic.parse(spec[:to])
-      @from = spec[:from] ? Chronic.parse(spec[:from]) : to.advance(:days => -1)
+      @to = Chronic.parse(spec[:to], :now => @now)
+      @from = spec[:from] ? Chronic.parse(spec[:from], :now => @now) : to.advance(:days => -1)
       @spec_from = spec[:from]
       @spec_to = spec[:to]
       @interval_unit = spec[:interval_unit] || :day
@@ -73,8 +74,8 @@ module Es
 
     attr_accessor :entities, :timeframe, :timezone
 
-    def self.parse(spec, a_load)
-      global_timeframe = parse_timeframes(spec[:timeframes]) || parse_timeframes("latest")
+    def self.parse(spec, a_load, options={})
+      global_timeframe = parse_timeframes(spec[:timeframes], options) || parse_timeframes("latest", options)
       timezone = spec[:timezone]
       parsed_entities = spec[:entities].map do |entity_spec|
         entity_name = entity_spec[:entity]
@@ -104,7 +105,7 @@ module Es
             fail InsufficientSpecificationError.new("The field #{field.to_s.bright} was not found in either the loading specification nor was recognized as a special column")
           end
         end
-        parsed_timeframe = parse_timeframes(entity_spec[:timeframes])
+        parsed_timeframe = parse_timeframes(entity_spec[:timeframes], options)
         Entity.new(entity_name, {
           :fields => fields,
           :file   => entity_spec[:file],
@@ -116,13 +117,12 @@ module Es
       Extract.new(parsed_entities)
     end
 
-    def self.parse_timeframes(timeframe_spec)
+    def self.parse_timeframes(timeframe_spec, options={})
       return nil if timeframe_spec.nil?
-      return Timeframe.parse("latest") if timeframe_spec == "latest"
       if timeframe_spec.is_a?(Array) then
-        timeframe_spec.map {|t_spec| Es::Timeframe.parse(t_spec)}
+        timeframe_spec.map {|t_spec| Es::Timeframe.parse(t_spec, options)}
       else
-        Es::Timeframe.parse(timeframe_spec)
+        Es::Timeframe.parse(timeframe_spec, options)
       end
     end
 
