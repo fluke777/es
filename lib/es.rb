@@ -177,7 +177,7 @@ module Es
     end
 
     def to_config
-      entities.map {|e| e.to_config}
+      entities.map {|e| e.to_load_config}
     end
 
     def to_config_file(filename)
@@ -261,11 +261,22 @@ module Es
       }
     end
 
-    def to_config
+    def to_load_config
       {
         :entity => name,
         :file   => file,
-        :fields => fields.map {|f| f.to_config}
+        :fields => fields.map {|f| f.to_load_config}
+      }
+    end
+
+    def to_extract_config
+      {
+        :timezone => timezone,
+        :entities => [{
+          :entity   => name,
+          :file     => file,
+          :fields   => fields.map {|f| f.name}
+        }]
       }
     end
 
@@ -388,7 +399,7 @@ module Es
       }
     end
 
-    def to_config
+    def to_load_config
       {
         :name => name,
         :type => (type == 'none' ? '' : type)
