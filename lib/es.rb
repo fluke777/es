@@ -177,7 +177,7 @@ module Es
     end
 
     def to_config
-      entities.map {|e| e.to_config}
+      entities.map {|e| e.to_load_config}
     end
 
     def to_config_file(filename)
@@ -261,11 +261,22 @@ module Es
       }
     end
 
-    def to_config
+    def to_load_config
       {
         :entity => name,
         :file   => file,
-        :fields => fields.map {|f| f.to_config}
+        :fields => fields.map {|f| f.to_load_config}
+      }
+    end
+
+    def to_extract_config
+      {
+        :timezone => timezone,
+        :entities => [{
+          :entity   => name,
+          :file     => file,
+          :fields   => fields.map {|f| f.name}
+        }]
       }
     end
 
@@ -323,7 +334,7 @@ module Es
     HISTORIC_TYPE       = "historicid"
     DURATION_TYPE       = "duration"
     VELOCITY_TYPE       = "velocity"
-    IS_DELETED_TYPE     = 'isDeleted'
+    IS_DELETED_TYPE     = "isDeleted"
 
     FIELD_TYPES = [ATTRIBUTE_TYPE, RECORDID_TYPE, DATE_TYPE, TIME_TYPE, FACT_TYPE, TIMESTAMP_TYPE, AUTOINCREMENT_TYPE, SNAPSHOT_TYPE, HID_TYPE, HISTORIC_TYPE, DURATION_TYPE, VELOCITY_TYPE, IS_DELETED_TYPE]
 
@@ -388,7 +399,7 @@ module Es
       }
     end
 
-    def to_config
+    def to_load_config
       {
         :name => name,
         :type => (type == 'none' ? '' : type)

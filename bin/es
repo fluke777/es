@@ -140,6 +140,10 @@ command :load_deleted do |c|
   c.desc 'Base files directory. If specified it will ignore specific files and it will pick up all files in this directory with pattern load*.json'
   c.default_value nil
   c.flag [:b, :basedir]
+  
+  c.desc 'Compatibility mode. If set to true deleted records will be loaded old style with type isDeleted. Otherwise deleted records will be loaded with type attribute and DeletedAt field will be added.'
+  c.default_value false
+  c.flag [:c, :compatibility]
 
   c.action do |global_options,options,args|
 
@@ -151,6 +155,9 @@ command :load_deleted do |c|
       # puts "would grab files like this #{"#{base_dir}/gen_load*.json"}"
       filenames = Dir::glob("#{base_dir}/gen_load*.json")
     end
+    
+    compatibility_mode = options[:compatibility] || false
+    deleted_type = compatibility_mode ? "isDeleted" : "attribute"
     
     filenames.each do |load_config_file|
       load_config = Es::Helpers.load_config(load_config_file)
@@ -167,28 +174,30 @@ command :load_deleted do |c|
           :fields => [
             Es::Field.new('Id', 'recordid'),
             Es::Field.new('Timestamp', 'timestamp'),
-            Es::Field.new('IsDeleted', 'attribute')
+            Es::Field.new('IsDeleted', deleted_type)
           ]
         })
         e.load(PID)
 
-        deleted_with_time = "#{source_dir}/#{deleted_filename}".gsub(/\.csv$/, '_del.csv')
-        FasterCSV.open(deleted_with_time, 'w') do |csv|
-          csv << ['Id', 'Timestamp', 'DeletedAt']
-          FasterCSV.foreach("#{source_dir}/#{deleted_filename}", :headers => true, :return_headers => false) do |row|
-            csv << row.values_at('Id', 'Timestamp', 'Timestamp')
+        if !compatibility_mode
+          deleted_with_time = "#{source_dir}/#{deleted_filename}".gsub(/\.csv$/, '_del.csv')
+          FasterCSV.open(deleted_with_time, 'w') do |csv|
+            csv << ['Id', 'Timestamp', 'DeletedAt']
+            FasterCSV.foreach("#{source_dir}/#{deleted_filename}", :headers => true, :return_headers => false) do |row|
+              csv << row.values_at('Id', 'Timestamp', 'Timestamp')
+            end
           end
-        end
 
-        e1 = Es::Entity.new(entity.name, {
-          :file   => deleted_with_time,
-          :fields => [
-            Es::Field.new('Id', 'recordid'),
-            Es::Field.new('Timestamp', 'timestamp'),
-            Es::Field.new('DeletedAt', 'time')
-          ]
-        })
-        e1.load(PID)
+          e1 = Es::Entity.new(entity.name, {
+            :file   => deleted_with_time,
+            :fields => [
+              Es::Field.new('Id', 'recordid'),
+              Es::Field.new('Timestamp', 'timestamp'),
+              Es::Field.new('DeletedAt', 'time')
+            ]
+          })
+          e1.load(PID)
+        end
       end
     end
   end
@@ -293,54 +302,110 @@ command :extract do |c|
   end
 end
 
+desc 'Generate extract config template'
+command :generate_extract do |c|
+  c.desc 'Base files directory. If specified it will ignore specific files and it will pick up all files in this directory with pattern load*.json'
+  c.default_value nil
+  c.flag [:b, :basedir]
+  
+  c.action do |global_options,options,args|
+    base_dir = options[:basedir]
+    fail "You need to specify base dir" if base_dir.nil?
+    
+    base_filenames = Dir::glob("#{base_dir}/gen_load_*.json")
+    # build one giant load config
+    base_entities = base_filenames.reduce([]) do |memo, filename|
+      fail "File #{filename} cannot be found" unless File.exist?(filename)
+      load_config = Es::Helpers.load_config(filename)
+      load = Es::Load.parse(load_config)
+      memo.concat(load.entities)
+    end
+    hyper_load = Es::Load.new(base_entities)
+    entity_names = hyper_load.entities.map {|e| e.name}.uniq
+
+    entity_names.each do |entity_name|
+      entity = hyper_load.get_merged_entity_for(entity_name)
+      
+      File.open(base_dir+"/gen_extract_"+entity.name+".json", 'w') do |f|
+          f.write JSON.pretty_generate(entity.to_extract_config)
+      end
+    end
+    
+  end
+end
 
 desc 'Generate base conifg template'
 command :generate_base do |c|
   
-  c.desc 'Name of the entity.'
+  c.desc 'Name of the entity. If inputdir is also specified all generated base files will have this entity set. If you want to set entity for each file according to the file name do not provide this parameter.'
   c.default_value nil
   c.flag [:e, :entity]
 
   c.desc 'Input file.'
   c.default_value nil
   c.flag [:i, :input]
-
+  
   c.desc 'Output filename. If not provided it print to STDOUT.'
   c.default_value nil
   c.flag [:o, :output]
+  
+  c.desc 'Input files directory. If specified it will ignore specific file and it will pick up all files in this directory with pattern *.csv'
+  c.default_value nil
+  c.flag [:s, :inputdir]
+
+  c.desc 'Base files directory. If this and inputdir are specified base JSONs will be generated into the directory.'
+  c.default_value nil
+  c.flag [:b, :basedir]
 
   c.action do |global_options,options,args|
-    entity_name = options[:entity]
+    entity = options[:entity]
     input_filename = options[:input]
+    input_dir = options[:inputdir]
     output_filename = options[:output]
+    base_dir = options[:basedir]
 
-    fail "You need to specify input entity name" if entity_name.nil?
-    fail "You need to specify input file name" if input_filename.nil?
+    fail "You need to specify input file name or input dir" if input_filename.nil? && input_dir.nil?
 
-    headers = nil
-    FasterCSV.foreach(input_filename, :headers => true, :return_headers => true) do |row|
-      if row.header_row?
-        headers = row.fields
-        break
-      end
-    end
-
-    load = Es::Load.new([
-      Es::Entity.new(entity_name, {
-        :file => input_filename,
-        :fields => headers.map do |field_name|
-          Es::Field.new(field_name, "none")
-        end
-      })
-    ])
-
-    config = JSON.pretty_generate(load.to_config)
-    if output_filename.nil?
-      puts config
+    if base_dir.nil?
+      input_filenames = [input_filename]
     else
-      File.open(output_filename, 'w') do |f|
-        f.write config
+      input_filenames = Dir::glob("#{input_dir}/*.csv")
+    end
+       
+    input_filenames.each do |input_filename|
+
+      headers = nil
+      FasterCSV.foreach(input_filename, :headers => true, :return_headers => true) do |row|
+        if row.header_row?
+          headers = row.fields
+          break
+        end
       end
+
+      entity_name = entity || File.basename(input_filename, ".csv")
+      load = Es::Load.new([
+        Es::Entity.new(entity_name, {
+          :file => input_filename,
+          :fields => headers.map do |field_name|
+            Es::Field.new(field_name, "none")
+          end
+        })
+      ])
+
+      config = JSON.pretty_generate(load.to_config)
+      
+      if input_dir && base_dir
+        File.open(base_dir+"/gen_load_"+entity_name+".json", 'w') do |f|
+          f.write config
+        end
+      elsif input_filename && output_filename
+        File.open(output_filename, 'w') do |f|
+          f.write config
+        end
+      else 
+        puts config
+      end
+      
     end
   end
 end
