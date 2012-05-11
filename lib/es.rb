@@ -202,8 +202,8 @@ module Es
       e = Es::Entity.new(name, {
         :file   => file,
         :fields => [
-          Es::Field.new('Id', 'recordid'),
           Es::Field.new('Timestamp', 'timestamp'),
+          Es::Field.new('Id', 'recordid'),
           Es::Field.new('IsDeleted', deleted_type)
         ]
       })
