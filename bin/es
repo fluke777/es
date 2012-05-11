@@ -145,7 +145,7 @@ command :extract do |c|
   c.desc 'Extract files directory. If specified it will ignore specific files and it will pick up all files in this directory with pattern extract*.json'
   c.default_value nil
   c.flag [:e, :extractdir]
-  
+
 
   c.action do |global_options,options,args|
     base_dir          = options[:basedir]

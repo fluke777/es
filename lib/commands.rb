@@ -159,6 +159,7 @@ module Es
       extract_dir   = options[:extract_dir]
       pid           = options[:pid]
       es_name       = options[:es_name]
+      now           = options[:now]
 
       if base_dir.nil? && extract_dir.nil?
         fail "Provide path to the loading configuration as a first argument" if args.first.nil?
@@ -182,7 +183,7 @@ module Es
       extract_config_files.each do |extract_config_file|
         fail "File #{extract_config_file} cannot be found" unless File.exist?(extract_config_file)
         extract_config = Es::Helpers.load_config(extract_config_file)
-        extract = Es::Extract.parse(extract_config, hyper_load)
+        extract = Es::Extract.parse(extract_config, hyper_load, :now => now)
 
         extract.entities.each do |entity|
           next if options[:only] && entity.name != options[:only]
