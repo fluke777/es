@@ -20,14 +20,17 @@ describe Es::Timeframe do
     @timeframe = Es::Timeframe.parse(@full_spec)
   end
 
+  it "should have to and from from spec" do
+    @bare_timeframe.spec_from.should == "today"
+    @bare_timeframe.spec_to.should == "tomorrow"
+  end
+
   it "should have to and from" do
-    @bare_timeframe.from.should == "today"
-    @bare_timeframe.to.should == "tomorrow"
+    @bare_timeframe.from.should == Chronic.parse('today')
+    @bare_timeframe.to.should == Chronic.parse('tomorrow')
   end
 
   it "should have all the stuff" do
-    @timeframe.from.should == "today"
-    @timeframe.to.should == "tomorrow"
     @timeframe.interval.should == 1
     @timeframe.interval_unit.should == :month
     @timeframe.day_within_period.should == :last

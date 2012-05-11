@@ -1,4 +1,3 @@
-require 'pry'
 require 'es'
 
 describe Es::Load do
@@ -63,32 +62,6 @@ describe Es::Load do
   it "can return a merged entity" do
     entity = @load.get_merged_entity_for("User")
     entity.fields.count == 2
-  end
-
-  it "should fail if there are multiple same fields in multiple entities of the same name" do
-    spec = [
-      {
-        :entity => "User",
-        :file   => "user_file",
-        :fields => [
-          {
-            :name => "Id",
-            :type => "recordid"
-          }
-        ]
-      },
-      {
-        :entity => "User",
-        :file   => "user_2_file",
-        :fields => [
-          {
-            :name => "Id",
-            :type => "fact"
-          }
-        ]
-      }
-    ]
-    lambda{load = Es::Load.parse(spec)}.should raise_error(Es::IncorrectSpecificationError)
   end
 
 end

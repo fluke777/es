@@ -22,7 +22,7 @@ module Es
   class Timeframe
     INTERVAL_UNITS = [:day, :week, :month, :year]
     DAY_WITHIN_PERIOD = [:first, :last]
-    attr_accessor :to, :from, :interval_unit, :interval, :day_within_period
+    attr_accessor :to, :from, :interval_unit, :interval, :day_within_period, :spec_from, :spec_to
 
     def self.parse(spec)
       if spec == 'latest' then
@@ -40,10 +40,13 @@ module Es
       @spec = spec
       @to = Chronic.parse(spec[:to])
       @from = spec[:from] ? Chronic.parse(spec[:from]) : to.advance(:days => -1)
+      @spec_from = spec[:from]
+      @spec_to = spec[:to]
       @interval_unit = spec[:interval_unit] || :day
       @interval = spec[:interval] || 1
       @day_within_period = spec[:day_within_period] || :last
     end
+
 
     def validate_spec(spec)
       fail IncorrectSpecificationError.new("Timeframe should have a specification") if spec.nil?
@@ -190,6 +193,21 @@ module Es
 
   class Entity
     attr_accessor :name, :fields, :file, :timeframes, :timezone
+
+    def self.create_deleted_entity(name, options = {})
+      compatibility_mode = options[:compatibility_mode]
+      deleted_type = compatibility_mode ? "isDeleted" : "attribute"
+      file = options[:file]
+      
+      e = Es::Entity.new(name, {
+        :file   => file,
+        :fields => [
+          Es::Field.new('Id', 'recordid'),
+          Es::Field.new('Timestamp', 'timestamp'),
+          Es::Field.new('IsDeleted', deleted_type)
+        ]
+      })
+    end
 
     def self.parse(spec)
       entity = Entity.new(spec[:entity], {

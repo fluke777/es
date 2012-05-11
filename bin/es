@@ -156,8 +156,7 @@ command :load_deleted do |c|
       filenames = Dir::glob("#{base_dir}/gen_load*.json")
     end
     
-    compatibility_mode = options[:compatibility] || false
-    deleted_type = compatibility_mode ? "isDeleted" : "attribute"
+    compatibility_mode = options[:compatibility]
     
     filenames.each do |load_config_file|
       load_config = Es::Helpers.load_config(load_config_file)
@@ -169,14 +168,8 @@ command :load_deleted do |c|
         deleted_source = "#{source_dir}/#{deleted_filename}"
         next unless File.exist? deleted_source
         next unless Es::Helpers.has_more_lines?(deleted_source)
-        e = Es::Entity.new(entity.name, {
-          :file   => deleted_source,
-          :fields => [
-            Es::Field.new('Id', 'recordid'),
-            Es::Field.new('Timestamp', 'timestamp'),
-            Es::Field.new('IsDeleted', deleted_type)
-          ]
-        })
+
+        e = Es::Entity.create_deleted_entity(entity.name, :compatibility_mode => compatibility, :file => deleted_source)
         e.load(PID)
 
         if !compatibility_mode

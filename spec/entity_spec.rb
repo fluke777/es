@@ -1,6 +1,16 @@
 require 'es'
 
-describe Es::Entity do
+describe "MyEntity" do
+
+  it "should generate deleted as an attribute when not in compatibility mode" do
+    entity = Es::Entity.create_deleted_entity("deleted", :compatibility_mode => false, :file => "file")
+    entity.fields.last.type.should == "attribute"
+  end
+
+  it "should generate deleted as an deleted record when in compatibility mode" do
+    entity = Es::Entity.create_deleted_entity("deleted", :compatibility_mode => true, :file => "file")
+    entity.fields.last.type.should == "isDeleted"
+  end
 
   it "should fail if the file is not defined" do
     opts = {
@@ -68,16 +78,5 @@ describe Es::Entity do
     lambda {Es::Entity.new("User", opts)}.should raise_error(Es::IncorrectSpecificationError)
   end
 
-  it "should fail if there are multiple fields with the same name" do
-    lambda {
-      Es::Entity.new("User", {
-        :file => 'file',
-        :fields => [
-          Es::Field.new("Id", 'recordid'),
-          Es::Field.new("Id", 'recordid')
-        ]
-      })}.should raise_error(Es::IncorrectSpecificationError)
-  end
-  
 
 end
