@@ -140,6 +140,10 @@ command :load_deleted do |c|
   c.desc 'Base files directory. If specified it will ignore specific files and it will pick up all files in this directory with pattern load*.json'
   c.default_value nil
   c.flag [:b, :basedir]
+  
+  c.desc 'Compatibility mode. If set to true deleted records will be loaded old style with type isDeleted. Otherwise deleted records will be loaded with type attribute and DeletedAt field will be added.'
+  c.default_value false
+  c.flag [:c, :compatibility]
 
   c.action do |global_options,options,args|
 
@@ -151,6 +155,9 @@ command :load_deleted do |c|
       # puts "would grab files like this #{"#{base_dir}/gen_load*.json"}"
       filenames = Dir::glob("#{base_dir}/gen_load*.json")
     end
+    
+    compatibility_mode = options[:compatibility] || false
+    deleted_type = compatibility_mode ? "isDeleted" : "attribute"
     
     filenames.each do |load_config_file|
       load_config = Es::Helpers.load_config(load_config_file)
@@ -167,28 +174,30 @@ command :load_deleted do |c|
           :fields => [
             Es::Field.new('Id', 'recordid'),
             Es::Field.new('Timestamp', 'timestamp'),
-            Es::Field.new('IsDeleted', 'attribute')
+            Es::Field.new('IsDeleted', deleted_type)
           ]
         })
         e.load(PID)
 
-        deleted_with_time = "#{source_dir}/#{deleted_filename}".gsub(/\.csv$/, '_del.csv')
-        FasterCSV.open(deleted_with_time, 'w') do |csv|
-          csv << ['Id', 'Timestamp', 'DeletedAt']
-          FasterCSV.foreach("#{source_dir}/#{deleted_filename}", :headers => true, :return_headers => false) do |row|
-            csv << row.values_at('Id', 'Timestamp', 'Timestamp')
+        if !compatibility_mode
+          deleted_with_time = "#{source_dir}/#{deleted_filename}".gsub(/\.csv$/, '_del.csv')
+          FasterCSV.open(deleted_with_time, 'w') do |csv|
+            csv << ['Id', 'Timestamp', 'DeletedAt']
+            FasterCSV.foreach("#{source_dir}/#{deleted_filename}", :headers => true, :return_headers => false) do |row|
+              csv << row.values_at('Id', 'Timestamp', 'Timestamp')
+            end
           end
-        end
 
-        e1 = Es::Entity.new(entity.name, {
-          :file   => deleted_with_time,
-          :fields => [
-            Es::Field.new('Id', 'recordid'),
-            Es::Field.new('Timestamp', 'timestamp'),
-            Es::Field.new('DeletedAt', 'time')
-          ]
-        })
-        e1.load(PID)
+          e1 = Es::Entity.new(entity.name, {
+            :file   => deleted_with_time,
+            :fields => [
+              Es::Field.new('Id', 'recordid'),
+              Es::Field.new('Timestamp', 'timestamp'),
+              Es::Field.new('DeletedAt', 'time')
+            ]
+          })
+          e1.load(PID)
+        end
       end
     end
   end
