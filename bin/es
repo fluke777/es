@@ -169,7 +169,7 @@ command :load_deleted do |c|
         next unless File.exist? deleted_source
         next unless Es::Helpers.has_more_lines?(deleted_source)
 
-        e = Es::Entity.create_deleted_entity(entity.name, :compatibility_mode => compatibility, :file => deleted_source)
+        e = Es::Entity.create_deleted_entity(entity.name, :compatibility_mode => compatibility_mode, :file => deleted_source)
         e.load(PID)
 
         if !compatibility_mode
