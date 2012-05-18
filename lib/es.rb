@@ -348,7 +348,7 @@ module Es
         web_dav_file = Es::Helpers.extract_destination_dir(pid, self) + '/' + Es::Helpers.destination_file(self)
         puts "Grabbing from web dav"
         GoodData.connection.download web_dav_file, file
-        puts "Done" if options[:verbose]
+        puts "Done"
       rescue RestClient::RequestFailed => error
         parser = Yajl::Parser.new(:symbolize_keys => true)
         doc = parser.parse(error.response)
@@ -409,6 +409,18 @@ module Es
 
     def is_recordid?
       type == RECORDID_TYPE
+    end
+
+    def is_attribute?
+      type == ATTRIBUTE_TYPE
+    end
+
+    def is_fact?
+      type == FACT_TYPE
+    end
+
+    def is_date?
+      type == DATE_TYPE
     end
 
     def is_snapshot?
