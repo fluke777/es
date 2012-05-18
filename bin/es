@@ -49,8 +49,8 @@ desc 'Creates ES'
 command :create do |c|
   c.action do |global_options,options,args|
     Commands::create({
-      :pid        = PID,
-      :es_name    = ES_NAME
+      :pid        => PID,
+      :es_name    => ES_NAME
     })
   end
 end
