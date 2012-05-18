@@ -108,7 +108,7 @@ module Es
         parsed_timeframe = parse_timeframes(entity_spec[:timeframes], options)
         Entity.new(entity_name, {
           :fields => fields,
-          :file   => entity_spec[:file],
+          :file   => Pathname.new(entity_spec[:file]).expand_path.to_s,
           :timeframe => parsed_timeframe || global_timeframe || (fail "Timeframe has to be defined"),
           :timezone => timezone
         })
@@ -211,7 +211,7 @@ module Es
 
     def self.parse(spec)
       entity = Entity.new(spec[:entity], {
-        :file => spec[:file],
+        :file => Pathname.new(spec[:file]).expand_path.to_s,
         :fields => spec[:fields] && spec[:fields].map {|field_spec| Field.parse(field_spec)}
       })
     end
