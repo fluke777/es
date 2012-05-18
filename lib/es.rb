@@ -335,6 +335,28 @@ module Es
       end
     end
 
+    def extract(pid, es_name)
+      begin
+        data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/readTasks", to_extract_fragment(pid, :pretty => false).to_json
+        link = data["asyncTask"]["link"]["poll"]
+        response = GoodData.get(link, :process => false)
+        while response.code != 204
+          sleep 10
+          response = GoodData.get(link, :process => false)
+        end
+        puts "Done downloading"
+        web_dav_file = Es::Helpers.extract_destination_dir(pid, self) + '/' + Es::Helpers.destination_file(self)
+        puts "Grabbing from web dav"
+        GoodData.connection.download web_dav_file, file
+        puts "Done" if options[:verbose]
+      rescue RestClient::RequestFailed => error
+        parser = Yajl::Parser.new(:symbolize_keys => true)
+        doc = parser.parse(error.response)
+        pp doc
+        exit 1
+      end
+    end
+
     def truncate(pid, es_name)
       begin
         data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/truncateTasks", {

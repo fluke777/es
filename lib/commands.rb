@@ -203,25 +203,7 @@ module Es
             puts "======= Extract JSON end"
             puts
           else
-            begin
-              data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/readTasks", entity.to_extract_fragment(pid, :pretty => false).to_json
-              link = data["asyncTask"]["link"]["poll"]
-              response = GoodData.get(link, :process => false)
-              while response.code != 204
-                sleep 10
-                response = GoodData.get(link, :process => false)
-              end
-              puts "Done downloading"
-              web_dav_file = Es::Helpers.extract_destination_dir(pid, entity) + '/' + Es::Helpers.destination_file(entity)
-              puts "Grabbing from web dav"
-              GoodData.connection.download web_dav_file, entity.file
-              puts "Done" if options[:verbose]
-            rescue RestClient::RequestFailed => error
-              parser = Yajl::Parser.new(:symbolize_keys => true)
-              doc = parser.parse(error.response)
-              pp doc
-              exit 1
-            end
+            entity.extract(pid, es_name)
           end
         end
       end
