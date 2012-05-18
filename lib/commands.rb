@@ -112,6 +112,9 @@ module Es
         filenames = Dir::glob("#{base_dir}/#{pattern}")
       end
 
+      compatibility_mode = options[:compatibility] || false
+      deleted_type = compatibility_mode ? "isDeleted" : "attribute"
+
       filenames.each do |load_config_file|
         load_config = Es::Helpers.load_config(load_config_file)
         load = Es::Load.parse(load_config)
@@ -127,28 +130,30 @@ module Es
             :fields => [
               Es::Field.new('Id', 'recordid'),
               Es::Field.new('Timestamp', 'timestamp'),
-              Es::Field.new('IsDeleted', 'attribute')
+              Es::Field.new('IsDeleted', deleted_type)
             ]
           })
           e.load(pid, es_name)
 
-          deleted_with_time = "#{source_dir}/#{deleted_filename}".gsub(/\.csv$/, '_del.csv')
-          FasterCSV.open(deleted_with_time, 'w') do |csv|
-            csv << ['Id', 'Timestamp', 'DeletedAt']
-            FasterCSV.foreach("#{source_dir}/#{deleted_filename}", :headers => true, :return_headers => false) do |row|
-              csv << row.values_at('Id', 'Timestamp', 'Timestamp')
+          if !compatibility_mode
+            deleted_with_time = "#{source_dir}/#{deleted_filename}".gsub(/\.csv$/, '_del.csv')
+            FasterCSV.open(deleted_with_time, 'w') do |csv|
+              csv << ['Id', 'Timestamp', 'DeletedAt']
+              FasterCSV.foreach("#{source_dir}/#{deleted_filename}", :headers => true, :return_headers => false) do |row|
+                csv << row.values_at('Id', 'Timestamp', 'Timestamp')
+              end
             end
-          end
 
-          e1 = Es::Entity.new(entity.name, {
-            :file   => deleted_with_time,
-            :fields => [
-              Es::Field.new('Id', 'recordid'),
-              Es::Field.new('Timestamp', 'timestamp'),
-              Es::Field.new('DeletedAt', 'time')
-            ]
-          })
-          e1.load(pid, es_name)
+            e1 = Es::Entity.new(entity.name, {
+              :file   => deleted_with_time,
+              :fields => [
+                Es::Field.new('Id', 'recordid'),
+                Es::Field.new('Timestamp', 'timestamp'),
+                Es::Field.new('DeletedAt', 'time')
+              ]
+            })
+            e1.load(pid, es_name)
+          end
         end
       end
       
