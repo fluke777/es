@@ -32,9 +32,10 @@ module Es
       basedir_pattern = options[:basedir_pattern] || "*.json"
 
       base_dir = options[:basedir]
+      
+      fail "You need to specify timestamp" if timestamp.nil?
       if base_dir.nil?
         # fail "You need to specify entity name" if entity_name.nil?
-        fail "You need to specify timestamp" if timestamp.nil?
         fail "You need to specify base filename" if filenames.empty?
       else
         # puts "would grab files like this #{"#{base_dir}/gen_load*.json"}"
@@ -48,7 +49,7 @@ module Es
 
         base.entities.each do |entity|
           next if !entity_name.nil? and entity_name != entity.name
-          entity.truncate(pid, es_name)
+          entity.truncate(pid, es_name, timestamp)
         end
       end
     end
@@ -125,14 +126,7 @@ module Es
           deleted_source = "#{source_dir}/#{deleted_filename}"
           next unless File.exist? deleted_source
           next unless Es::Helpers.has_more_lines?(deleted_source)
-          e = Es::Entity.new(entity.name, {
-            :file   => deleted_source,
-            :fields => [
-              Es::Field.new('Id', 'recordid'),
-              Es::Field.new('Timestamp', 'timestamp'),
-              Es::Field.new('IsDeleted', deleted_type)
-            ]
-          })
+          e = Es::Entity.create_deleted_entity(entity.name, {:compatibility_mode => compatibility_mode, :file => deleted_source})
           e.load(pid, es_name)
 
           if !compatibility_mode
@@ -160,11 +154,12 @@ module Es
     end
 
     def self.extract(options)
-      base_dir      = options[:base_dir]
-      extract_dir   = options[:extract_dir]
+      base_dir      = options[:basedir]
+      extract_dir   = options[:extractdir]
       pid           = options[:pid]
       es_name       = options[:es_name]
       now           = options[:now]
+      args          = options[:args]
 
       if base_dir.nil? && extract_dir.nil?
         fail "Provide path to the loading configuration as a first argument" if args.first.nil?
@@ -214,5 +209,81 @@ module Es
       end
     end
 
+
+    def self.generate_base(options)
+      entity = options[:entity]
+      input_filename = options[:input]
+      input_dir = options[:inputdir]
+      output_filename = options[:output]
+      base_dir = options[:basedir]
+
+      fail "You need to specify input file name or input dir" if input_filename.nil? && input_dir.nil?
+
+      if base_dir.nil?
+        input_filenames = [input_filename]
+        else
+        input_filenames = Dir::glob("#{input_dir}/*.csv")
+      end
+      
+      input_filenames.each do |input_filename|
+        
+        headers = nil
+        FasterCSV.foreach(input_filename, :headers => true, :return_headers => true) do |row|
+          if row.header_row?
+            headers = row.fields
+            break
+          end
+        end
+        
+        entity_name = entity || File.basename(input_filename, ".csv")
+        load = Es::Load.new([
+                            Es::Entity.new(entity_name, {
+                                           :file => input_filename,
+                                           :fields => headers.map do |field_name|
+                                           Es::Field.new(field_name, "none")
+                                           end
+                                           })
+                            ])
+        
+        config = JSON.pretty_generate(load.to_config)
+        
+        if input_dir && base_dir
+          File.open(base_dir+"/gen_load_"+entity_name+".json", 'w') do |f|
+            f.write config
+          end
+          elsif input_filename && output_filename
+          File.open(output_filename, 'w') do |f|
+            f.write config
+          end
+          else 
+          puts config
+        end
+      end
+    end
+    
+    def self.generate_extract(options)
+      base_dir = options[:basedir]
+      fail "You need to specify base dir" if base_dir.nil?
+
+      base_filenames = Dir::glob("#{base_dir}/gen_load_*.json")
+      # build one giant load config
+      base_entities = base_filenames.reduce([]) do |memo, filename|
+        fail "File #{filename} cannot be found" unless File.exist?(filename)
+        load_config = Es::Helpers.load_config(filename)
+        load = Es::Load.parse(load_config)
+        memo.concat(load.entities)
+      end
+      hyper_load = Es::Load.new(base_entities)
+      entity_names = hyper_load.entities.map {|e| e.name}.uniq
+
+      entity_names.each do |entity_name|
+        entity = hyper_load.get_merged_entity_for(entity_name)
+        
+        File.open(base_dir+"/gen_extract_"+entity.name+".json", 'w') do |f|
+          f.write JSON.pretty_generate(entity.to_extract_config)
+        end
+      end
+    end
+    
   end
 end

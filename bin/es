@@ -109,7 +109,7 @@ command :load_deleted do |c|
   
   c.desc 'Compatibility mode. If set to true deleted records will be loaded old style with type isDeleted. Otherwise deleted records will be loaded with type attribute and DeletedAt field will be added.'
   c.default_value false
-  c.flag [:c, :compatibility]
+  c.switch [:c, :compatibility]
 
   c.action do |global_options,options,args|
     options[:filenames] = args
@@ -149,8 +149,7 @@ command :extract do |c|
 
 
   c.action do |global_options,options,args|
-    base_dir          = options[:basedir]
-    extract_dir       = options[:extractdir]
+    options[:args]    = args
     options[:pid]     = PID
     options[:es_name] = ES_NAME
     Es::Commands::extract(options)
@@ -164,28 +163,7 @@ command :generate_extract do |c|
   c.flag [:b, :basedir]
   
   c.action do |global_options,options,args|
-    base_dir = options[:basedir]
-    fail "You need to specify base dir" if base_dir.nil?
-    
-    base_filenames = Dir::glob("#{base_dir}/gen_load_*.json")
-    # build one giant load config
-    base_entities = base_filenames.reduce([]) do |memo, filename|
-      fail "File #{filename} cannot be found" unless File.exist?(filename)
-      load_config = Es::Helpers.load_config(filename)
-      load = Es::Load.parse(load_config)
-      memo.concat(load.entities)
-    end
-    hyper_load = Es::Load.new(base_entities)
-    entity_names = hyper_load.entities.map {|e| e.name}.uniq
-
-    entity_names.each do |entity_name|
-      entity = hyper_load.get_merged_entity_for(entity_name)
-      
-      File.open(base_dir+"/gen_extract_"+entity.name+".json", 'w') do |f|
-          f.write JSON.pretty_generate(entity.to_extract_config)
-      end
-    end
-    
+    Es::Commands::generate_extract(options)
   end
 end
 
@@ -213,55 +191,7 @@ command :generate_base do |c|
   c.flag [:b, :basedir]
 
   c.action do |global_options,options,args|
-    entity = options[:entity]
-    input_filename = options[:input]
-    input_dir = options[:inputdir]
-    output_filename = options[:output]
-    base_dir = options[:basedir]
-
-    fail "You need to specify input file name or input dir" if input_filename.nil? && input_dir.nil?
-
-    if base_dir.nil?
-      input_filenames = [input_filename]
-    else
-      input_filenames = Dir::glob("#{input_dir}/*.csv")
-    end
-       
-    input_filenames.each do |input_filename|
-
-      headers = nil
-      FasterCSV.foreach(input_filename, :headers => true, :return_headers => true) do |row|
-        if row.header_row?
-          headers = row.fields
-          break
-        end
-      end
-
-      entity_name = entity || File.basename(input_filename, ".csv")
-      load = Es::Load.new([
-        Es::Entity.new(entity_name, {
-          :file => input_filename,
-          :fields => headers.map do |field_name|
-            Es::Field.new(field_name, "none")
-          end
-        })
-      ])
-
-      config = JSON.pretty_generate(load.to_config)
-      
-      if input_dir && base_dir
-        File.open(base_dir+"/gen_load_"+entity_name+".json", 'w') do |f|
-          f.write config
-        end
-      elsif input_filename && output_filename
-        File.open(output_filename, 'w') do |f|
-          f.write config
-        end
-      else 
-        puts config
-      end
-      
-    end
+    Es::Commands::generate_base(options)  
   end
 end
 
@@ -285,7 +215,7 @@ command :truncate do |c|
     options[:pid]             = PID
     options[:es_name]         = ES_NAME
     options[:basedir_pattern] = "gen_load*.json"
-    Es::Commands.truncate(options)
+    Es::Commands::truncate(options)
   end
 end
 
@@ -410,7 +340,7 @@ post do |global,command,options,args|
 end
 
 on_error do |exception|
-  # pp exception.backtrace
+   pp exception.backtrace
   if exception.is_a?(SystemExit) && exception.status == 0
     false
   else

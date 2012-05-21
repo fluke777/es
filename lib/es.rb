@@ -200,7 +200,7 @@ module Es
       compatibility_mode = options[:compatibility_mode]
       deleted_type = compatibility_mode ? "isDeleted" : "attribute"
       file = options[:file]
-      
+      binding.pry
       e = Es::Entity.new(name, {
         :file   => file,
         :fields => [
@@ -359,11 +359,11 @@ module Es
       end
     end
 
-    def truncate(pid, es_name)
+    def truncate(pid, es_name, timestamp)
       begin
         data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/truncateTasks", {
           :truncateTask => {
-            :entity     => entity.name,
+            :entity     => @name,
             :timestamp  => timestamp.to_i
           }
         }
