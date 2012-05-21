@@ -7,6 +7,8 @@ require 'yajl'
 require 'active_support/time'
 require 'active_support/ordered_hash'
 require 'terminal-table'
+require 'pathname'
+require 'commands'
 
 module Es
 

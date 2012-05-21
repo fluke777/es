@@ -48,7 +48,7 @@ flag [:w,:webdav]
 desc 'Creates ES'
 command :create do |c|
   c.action do |global_options,options,args|
-    Commands::create({
+    Es::Commands::create({
       :pid        => PID,
       :es_name    => ES_NAME
     })
@@ -58,7 +58,7 @@ end
 desc 'Delete ES'
 command :delete do |c|
   c.action do |global_options,options,args|
-    Commands::delete({
+    Es::Commands::delete({
       :pid      => PID,
       :es_name  => ES_NAME
     })
@@ -69,7 +69,7 @@ end
 desc 'Show all types that are supported.'
 command :types do |c|
   c.action do |global_options,options,args|
-    Commands::get_types.each {|t| puts t}
+    Es::Commands::get_types.each {|t| puts t}
   end
 end
 
@@ -96,7 +96,7 @@ command :load do |c|
     options[:pattern]   = "gen_load*.json"
     options[:pid]       = PID
     options[:es_name]   = ES_NAME
-    Commands::load(options)
+    Es::Commands::load(options)
   end
 end
 
@@ -113,8 +113,10 @@ command :load_deleted do |c|
 
   c.action do |global_options,options,args|
     options[:filenames] = args
-    options[:pattern] = "gen_load*.json"
-    Commands::load_deleted(options)
+    options[:pattern]   = "gen_load*.json"
+    options[:pid]       = PID
+    options[:es_name]   = ES_NAME
+    Es::Commands::load_deleted(options)
   end
 end
 
@@ -151,7 +153,7 @@ command :extract do |c|
     extract_dir       = options[:extractdir]
     options[:pid]     = PID
     options[:es_name] = ES_NAME
-    Commands::extract(options)
+    Es::Commands::extract(options)
   end
 end
 
@@ -283,7 +285,7 @@ command :truncate do |c|
     options[:pid]             = PID
     options[:es_name]         = ES_NAME
     options[:basedir_pattern] = "gen_load*.json"
-    Commands.truncate(options)
+    Es::Commands.truncate(options)
   end
 end
 
