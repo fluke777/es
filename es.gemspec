@@ -1,5 +1,7 @@
 # Ensure we require the local version and not one we might have installed already
-require File.join([File.dirname(__FILE__),'lib','es_version.rb'])
+$:.push File.expand_path("../lib", __FILE__)
+require "es_version"
+
 spec = Gem::Specification.new do |s| 
   s.name = 'es'
   s.version = Es::VERSION
