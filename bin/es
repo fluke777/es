@@ -340,7 +340,7 @@ post do |global,command,options,args|
 end
 
 on_error do |exception|
-   pp exception.backtrace
+  # pp exception.backtrace
   if exception.is_a?(SystemExit) && exception.status == 0
     false
   else
