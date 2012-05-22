@@ -200,7 +200,7 @@ module Es
       compatibility_mode = options[:compatibility_mode]
       deleted_type = compatibility_mode ? "isDeleted" : "attribute"
       file = options[:file]
-      binding.pry
+    
       e = Es::Entity.new(name, {
         :file   => file,
         :fields => [
