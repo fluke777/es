@@ -96,7 +96,7 @@ module Es
           elsif field == "duration"
             Es::DurationField.new("duration", "duration")
           elsif field == "velocity"
-            Es::DurationField.new("velocity", "velocity")
+            Es::VelocityField.new("velocity", "velocity")
           elsif field.respond_to?(:keys) && field.keys.first == :hid
             Es::HIDField.new('hid', "historicid", {
               :entity => field[:hid][:from_entity],
