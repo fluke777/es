@@ -285,5 +285,42 @@ module Es
       end
     end
     
+    def self.load_column(options)
+      file = options[:input]
+      name = options[:name]
+      type = options[:type]
+      entity = options[:entity]
+      base_filename = options[:base]
+      pid = options[:pid]
+      es_name = options[:es_name]
+      rid_name = options[:rid] || 'Id'
+
+      fail "You need to specify column name" if name.nil?
+      fail "You need to specify column type" if type.nil?
+      fail "You need to specify entity name" if entity.nil?
+      fail "You need to specify input file name" if file.nil?
+
+      base_config_file = Es::Helpers.load_config(base_filename)
+      base = Es::Load.parse(base_config_file)
+
+      load = Es::Load.new([
+        Es::Entity.new(entity, {
+           :file => file,
+           :fields => [
+             Es::Field.new('Timestamp', 'timestamp'),
+             Es::Field.new(rid_name, 'recordid'),
+             Es::Field.new(name, type)
+           ]
+        })
+      ])
+
+      base.get_entity(entity).add_field(Es::Field.new(name, type))
+      puts "Added field #{name}" if options[:verbose]
+      base.to_config_file(base_filename)
+
+      load.entities.first.load(pid, es_name)
+    
+    end
+    
   end
 end

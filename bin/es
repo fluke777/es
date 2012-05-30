@@ -249,39 +249,15 @@ command :load_column do |c|
   c.desc 'Input data filename.'
   c.default_value nil
   c.flag [:i, :input]
+  
+  c.desc 'Name of recordid column'
+  c.default_value nil
+  c.flag :rid
 
   c.action do |global_options,options,args|
-    puts "EXPERIMENTAL FEATURE - BEWARE".color(:red)
-    file = options[:input]
-    name = options[:name]
-    type = options[:type]
-    entity = options[:entity]
-    base_filename = options[:base]
-
-    fail "You need to specify column name" if name.nil?
-    fail "You need to specify column type" if type.nil?
-    fail "You need to specify entity name" if entity.nil?
-    fail "You need to specify input file name" if file.nil?
-
-    base_config_file = Es::Helpers.load_config(base_filename)
-    base = Es::Load.parse(base_config_file)
-
-    load = Es::Load.new([
-      Es::Entity.new(entity, {
-        :file => file,
-        :fields => [
-          Es::Field.new('id', 'recordid'),
-          Es::Field.new('timestamp', 'timestamp'),
-          Es::Field.new(name, type)
-        ]
-      })
-    ])
-
-    base.get_entity(entity).add_field(Es::Field.new(name, type))
-    puts "Added field #{field.name}" if options[:verbose]
-    base.to_config_file(base_filename)
-    
-    load.entities.first.load(PID, ES_NAME)
+    options[:pid] = PID
+    options[:es_name] = ES_NAME
+    Es::Commands::load_column(options)
   end
 end
 
@@ -340,7 +316,7 @@ post do |global,command,options,args|
 end
 
 on_error do |exception|
-  # pp exception.backtrace
+   pp exception.backtrace
   if exception.is_a?(SystemExit) && exception.status == 0
     false
   else
