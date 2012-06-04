@@ -352,8 +352,7 @@ module Es
         GoodData.connection.download web_dav_file, file
         puts "Done"
       rescue RestClient::RequestFailed => error
-        parser = Yajl::Parser.new(:symbolize_keys => true)
-        doc = parser.parse(error.response)
+        doc = Yajl::Parser.parse(error.response, :symbolize_keys => true)
         pp doc
         exit 1
       end
