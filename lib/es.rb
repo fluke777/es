@@ -333,7 +333,7 @@ module Es
         parser = Yajl::Parser.new(:symbolize_keys => true)
         doc = parser.parse(error.response)
         pp doc
-        exit 1
+        raise error
       end
     end
 
@@ -354,7 +354,7 @@ module Es
       rescue RestClient::RequestFailed => error
         doc = Yajl::Parser.parse(error.response, :symbolize_keys => true)
         pp doc
-        exit 1
+        raise error
       end
     end
 
@@ -366,9 +366,9 @@ module Es
             :timestamp  => timestamp.to_i
           }
         }
-      rescue RestClient::BadRequest => e
-        puts e.inspect
-        exit 1
+      rescue RestClient::BadRequest => error
+        puts error.inspect
+        raise error
       end
       link = data["asyncTask"]["link"]["poll"]
       response = GoodData.get(link, :process => false)
