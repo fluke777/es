@@ -60,6 +60,7 @@ module Es
       filenames = options[:filenames]
       base_dir  = options[:basedir]
       pattern   = options[:pattern] || "*.json"
+      only      = options[:only]
 
       if base_dir.nil?
         fail "Provide path to the loading configuration as a first argument" if filenames.empty?
@@ -75,7 +76,7 @@ module Es
         load = Es::Load.parse(load_config_file)
 
         load.entities.each do |entity|
-          next if options[:only] && entity.name != options[:only]
+          next if only && entity.name != only
           next unless Es::Helpers.has_more_lines?(entity.file)
           web_dav_file = Es::Helpers.load_destination_dir(pid, entity) + '/' + Es::Helpers.destination_file(entity)
           if options[:verbose]
