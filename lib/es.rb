@@ -330,8 +330,11 @@ module Es
           response = GoodData.get(link, :process => false)
         end
       rescue RestClient::RequestFailed => error
-        parser = Yajl::Parser.new(:symbolize_keys => true)
-        doc = parser.parse(error.response)
+        begin
+          doc = Yajl::Parser.parse(error.response, :symbolize_keys => true)
+        rescue Yajl::ParseError => e
+          puts "Error parsing \"#{error.response}\""
+        end
         pp doc
         raise error
       end
@@ -352,7 +355,11 @@ module Es
         GoodData.connection.download web_dav_file, file
         puts "Done"
       rescue RestClient::RequestFailed => error
-        doc = Yajl::Parser.parse(error.response, :symbolize_keys => true)
+        begin
+          doc = Yajl::Parser.parse(error.response, :symbolize_keys => true)
+        rescue Yajl::ParseError => e
+          puts "Error parsing \"#{error.response}\""
+        end
         pp doc
         raise error
       end
