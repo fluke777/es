@@ -326,8 +326,11 @@ module Es
         link = data["asyncTask"]["link"]["poll"]
         response = GoodData.get(link, :process => false)
         while response.code != 204
-          sleep 10
-          response = GoodData.get(link, :process => false)
+          sleep 5
+          GoodData.connection.retryable(:tries => 3, :on => RestClient::InternalServerError) do
+            sleep 5
+            response = GoodData.get(link, :process => false)
+          end
         end
       rescue RestClient::RequestFailed => error
         begin
@@ -346,7 +349,10 @@ module Es
         link = data["asyncTask"]["link"]["poll"]
         response = GoodData.get(link, :process => false)
         while response.code != 204
-          sleep 10
+          GoodData.connection.retryable(:tries => 3, :on => RestClient::InternalServerError) do
+            sleep 5
+            response = GoodData.get(link, :process => false)
+          end
           response = GoodData.get(link, :process => false)
         end
         puts "Done downloading"
