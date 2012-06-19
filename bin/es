@@ -73,6 +73,31 @@ command :types do |c|
   end
 end
 
+desc 'Init ES'
+command :init do |c|
+  c.desc 'Execute only for one entity.'
+  c.default_value false
+  c.flag [:o, :only]
+  
+  c.desc 'Init also IsDeleted and DeletedAt columns.'
+  c.default_value false
+  c.switch [:d, :deleted]
+  
+  c.desc 'Verbose mode'
+  c.default_value false
+  c.switch [:v, :verbose]
+  
+  c.desc 'Base files directory.'
+  c.default_value nil
+  c.flag [:b, :basedir]
+  
+  c.action do |global_options,options,args|
+    options[:pid]       = PID
+    options[:es_name]   = ES_NAME
+    Es::Commands::init(options)
+  end
+end
+
 desc 'Load data'
 command :load do |c|
   c.desc 'Execute only for one entity.'

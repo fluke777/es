@@ -8,6 +8,7 @@ require 'active_support/time'
 require 'active_support/ordered_hash'
 require 'terminal-table'
 require 'pathname'
+require 'tempfile'
 require 'commands'
 
 module Es
@@ -423,6 +424,10 @@ module Es
 
     def is_recordid?
       type == RECORDID_TYPE
+    end
+    
+    def is_timestamp?
+      type == TIMESTAMP_TYPE
     end
 
     def is_attribute?
