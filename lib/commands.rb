@@ -30,6 +30,7 @@ module Es
       timestamp       = options[:timestamp]
       filenames       = options[:load_filenames]
       basedir_pattern = options[:basedir_pattern] || "*.json"
+      logger          = options[:logger]
 
       base_dir = options[:basedir]
       
@@ -49,6 +50,7 @@ module Es
 
         base.entities.each do |entity|
           next if !entity_name.nil? and entity_name != entity.name
+          logger.info "truncating entity \"#{entity.name}\"} at timestamp #{timestamp} that is #{Time.at(timestamp).to_s}" if logger
           entity.truncate(pid, es_name, timestamp)
         end
       end
@@ -61,6 +63,7 @@ module Es
       base_dir  = options[:basedir]
       pattern   = options[:pattern] || "*.json"
       only      = options[:only]
+      logger    = options[:logger]
 
       if base_dir.nil?
         fail "Provide path to the loading configuration as a first argument" if filenames.empty?
@@ -78,6 +81,10 @@ module Es
         load.entities.each do |entity|
           next if only && entity.name != only
           next unless Es::Helpers.has_more_lines?(entity.file)
+
+          logger.info "Loading entity \"#{entity.name}\", fields #{entity.fields.map {|f| f.name}.join(', ')}" if logger
+          logger.info "Using json => #{entity.to_load_fragment(pid).to_json}" if logger
+
           web_dav_file = Es::Helpers.load_destination_dir(pid, entity) + '/' + Es::Helpers.destination_file(entity)
           if options[:verbose]
             puts "Entity #{entity.name}".bright
@@ -106,6 +113,7 @@ module Es
       pattern   = options[:pattern] || "*.json"
       pid       = options[:pid]
       es_name   = options[:es_name]
+      logger    = options[:logger]
 
       if base_dir.nil?
         fail "Provide path to the loading configuration as a first argument" if filenames.empty?
@@ -126,7 +134,12 @@ module Es
           deleted_filename = Es::Helpers.destination_file(entity, :deleted => true)
           deleted_source = "#{source_dir}/#{deleted_filename}"
           next unless File.exist? deleted_source
-          next unless Es::Helpers.has_more_lines?(deleted_source)
+          has_more_lines = Es::Helpers.has_more_lines?(deleted_source)
+          logger.info "Deleted records for entity #{entity.name} is not loaded since the file #{deleted_source} is empty." if logger && !has_more_lines
+          next unless has_more_lines
+
+          logger.info "Loading deleted records for entity #{entity.name} in with compatibility mode set to #{compatibility_mode}." if logger
+
           e = Es::Entity.create_deleted_entity(entity.name, {:compatibility_mode => compatibility_mode, :file => deleted_source})
           e.load(pid, es_name)
 
@@ -161,6 +174,7 @@ module Es
       es_name       = options[:es_name]
       now           = options[:now]
       args          = options[:args]
+      logger        = options[:logger]
 
       if base_dir.nil? && extract_dir.nil?
         fail "Provide path to the loading configuration as a first argument" if args.first.nil?
@@ -188,7 +202,9 @@ module Es
 
         extract.entities.each do |entity|
           next if options[:only] && entity.name != options[:only]
-          # pp extract.to_extract_fragment(pid)
+
+          logger.info "Extracting entity \"#{entity.name}\", fields #{entity.fields.map {|f| f.name}.join(', ')}" if logger
+          logger.info "Using json => #{entity.to_extract_fragment(pid, :pretty => false).to_json}" if logger
 
           if options[:verbose] || options[:json] || options[:debug] then
             puts "Entity #{entity.name.bright}" 
