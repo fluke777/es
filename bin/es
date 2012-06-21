@@ -147,11 +147,26 @@ command :extract do |c|
   c.default_value nil
   c.flag [:e, :extractdir]
 
+  c.desc 'Business date'
+  c.default_value nil
+  c.flag [:n, :business_date]
 
   c.action do |global_options,options,args|
     options[:args]    = args
     options[:pid]     = PID
     options[:es_name] = ES_NAME
+    business_date = nil
+    begin
+      business_date = Date.strptime(options[:business_date], "%Y-%m-%d").to_time unless options[:business_date].nil?
+    rescue ArgumentError => e
+      begin
+        business_date = Time.at(Integer(options[:business_date]))
+      rescue ArgumentError => e
+        fail "Business date cannot be parsed from #{options[:business_date]} either as a date in format YYYY-MM-DD or an epoch timestamp"
+      end
+    end
+
+    options[:now] = business_date
     Es::Commands::extract(options)
   end
 end
