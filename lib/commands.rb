@@ -30,50 +30,57 @@ module Es
       deleted         = options[:deleted]
       only            = options[:only]
       
-      fail "Provide path to the loading configuration" if base_dir.nil?
-      filenames = Dir::glob("#{base_dir}/gen_json*.json")
+      max_timestamp = 2147483647
       
-      # for each config file
-      filenames.each do |filename|
+      fail "Provide path to the loading configuration" if base_dir.nil?
+      base_filenames = Dir::glob("#{base_dir}/gen_load*.json")
+      
+      base_entities = base_filenames.reduce([]) do |memo, filename|
         fail "File #{filename} cannot be found" unless File.exist?(filename)
-        load_config_file = Es::Helpers.load_config(filename)
-        load = Es::Load.parse(load_config_file)
-        
-        load.entities.each do |entity|
-          next if only && entity.name != only
-          begin
-            tmp_file = Tempfile.new(entity.name)
-            header_row = []
-            content_row = []
-            entity.fields.each do |field|
-              header_row << field.name
-              content_row << 2147483647 if field.is_timestamp?
-              content_row << 1 if field.is_recordid?
-              content_row << "" if !field.is_recordid? && !field.is_timestamp?
-            end
-            if deleted
-              header_row << "IsDeleted" << "DeletedAt"
-              content_row << "" << ""
-            end
-            tmp_file.puts(header_row.join(","))
-            tmp_file.puts(content_row.join(","))
-            entity.file = tmp_file.path
-            # create temp file, link it to entity
-            web_dav_file = Es::Helpers.load_destination_dir(pid, entity) + '/' + Es::Helpers.destination_file(entity)
-            if options[:verbose]
-              puts "Entity #{entity.name}".bright
-              puts "Configuration from #{filename}"
-              puts "Will load from #{entity.file} to #{web_dav_file}"
-              puts JSON::pretty_generate(entity.to_load_fragment(pid))
-            end
-            entity.load(pid, es_name)
-            puts "Done" if options[:verbose]
-          ensure
-            tmp_file.close
-            tmp_file.unlink
+        load_config = Es::Helpers.load_config(filename)
+        load = Es::Load.parse(load_config)
+        memo.concat(load.entities)
+      end
+      hyper_load = Es::Load.new(base_entities)
+      entity_names = hyper_load.entities.map {|e| e.name}.uniq
+
+      entity_names.each do |entity_name|
+        next if only && entity_name != only
+        entity = hyper_load.get_merged_entity_for(entity_name)    
+        Tempfile.new(entity.name) do |tmp_file|
+          header_row = []
+          content_row = []
+          entity.fields.each do |field|
+            header_row << field.name
+            content_row << max_timestamp if field.is_timestamp?
+            content_row << 1 if field.is_recordid?
+            content_row << "" if !field.is_recordid? && !field.is_timestamp?
           end
-          truncate(:pid => options[:pid], :es_name => options[:es_name], :load_filenames => [filename], :timestamp => 2147483646, :entity => entity)
+          if deleted
+            header_row << "IsDeleted" << "DeletedAt"
+            content_row << "" << ""
+            entity.add_field(Es::Field.new('IsDeleted', 'attribute')) unless entity.has_field?('IsDeleted')
+            entity.add_field(Es::Field.new('DeletedAt', 'time')) unless entity.has_field?('DeletedAt')
+          end
+          tmp_file.puts(header_row.join(","))
+          tmp_file.puts(content_row.join(","))
+          tmp_file.flush
+          
+          entity.file = tmp_file.path
+          # create temp file, link it to entity
+          web_dav_file = Es::Helpers.load_destination_dir(pid, entity) + '/' + Es::Helpers.destination_file(entity)
+          if options[:verbose]
+            puts "Entity #{entity.name}".bright
+            puts "Will load from #{entity.file} to #{web_dav_file}"
+            puts JSON::pretty_generate(entity.to_load_fragment(pid))
+          end
+          entity.load(pid, es_name)
+          puts "Done" if options[:verbose]
         end
+        if options[:verbose]
+          puts "Truncating loaded dummy data for #{entity.name}. Using timestamp #{max_timestamp - 1}."
+        end
+        entity.truncate(pid, es_name, (max_timestamp - 1))
       end
     end
 

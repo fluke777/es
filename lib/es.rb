@@ -30,7 +30,7 @@ module Es
     def self.parse(spec, options={})
       if spec == 'latest' then
         Timeframe.new({
-          :to => 'today',
+          :to => 'tomorrow',
           :from => 'yesterday'
         }, options)
       else
@@ -165,6 +165,7 @@ module Es
       entities_to_merge = entities.find_all {|e| e.name == name}
       fail UnableToMerge.new("There is no entity #{name.bright} in current load object.") if entities_to_merge.empty?
       merged_fields = entities_to_merge.inject([]) {|all, e| all.concat e.fields}
+      merged_fields = merged_fields.uniq_by {|obj| [obj.name, obj.type]}
       Entity.new(name, {
         :file => "MERGED",
         :fields => merged_fields
@@ -242,8 +243,7 @@ module Es
     end
 
     def has_multiple_same_fields?
-      fields_without = fields.find_all {|f| !f.is_recordid? && f.type != Field::TIMESTAMP_TYPE}
-      fields_without.uniq_by {|s| s.name}.count != fields_without.count
+      fields.uniq_by {|s| s.name}.count != fields.count
     end
 
     def to_extract_fragment(pid, options = {})
