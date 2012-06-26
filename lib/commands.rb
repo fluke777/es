@@ -46,8 +46,9 @@ module Es
 
       entity_names.each do |entity_name|
         next if only && entity_name != only
-        entity = hyper_load.get_merged_entity_for(entity_name)    
-        Tempfile.new(entity.name) do |tmp_file|
+        entity = hyper_load.get_merged_entity_for(entity_name)  
+        
+        Tempfile.open(entity.name) do |tmp_file|
           header_row = []
           content_row = []
           entity.fields.each do |field|
@@ -69,6 +70,7 @@ module Es
           entity.file = tmp_file.path
           # create temp file, link it to entity
           web_dav_file = Es::Helpers.load_destination_dir(pid, entity) + '/' + Es::Helpers.destination_file(entity)
+    
           if options[:verbose]
             puts "Entity #{entity.name}".bright
             puts "Will load from #{entity.file} to #{web_dav_file}"
