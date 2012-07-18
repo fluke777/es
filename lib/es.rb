@@ -37,8 +37,7 @@ module Es
         Timeframe.new(spec, options)
       end
     end
-    
-    
+        
     def self.parseOldFormat(spec, options={})
       if spec == 'latest' then
         Timeframe.new({
@@ -46,13 +45,13 @@ module Es
           :from => 'yesterday'
         })
       else
-	Timeframe.new({
-		    :to => spec[:endDate],
-		    :from => spec[:startDate],
-		    :interval_unit => spec[:intervalUnit],
-		    :interval => spec[:interval],
-		    :day_within_period => spec[:dayWithinPeriod].downcase
-		    })
+        Timeframe.new({
+                       :to => spec[:endDate],
+                       :from => spec[:startDate],
+                       :interval_unit => spec[:intervalUnit],
+                       :interval => spec[:interval],
+                       :day_within_period => spec[:dayWithinPeriod].downcase
+                      })
       end
     end
     
@@ -140,58 +139,49 @@ module Es
 
     
     def self.parseOldFormat(spec,a_load)
-	global_timeframe = parseOldFormat_timeframes(spec[:timeFrames])
-	timezone = spec[:timezone]
-	entity_name = spec[:entity]
-	load_entity = a_load.get_merged_entity_for(entity_name)
-	parser = Yajl::Parser.new(:symbolize_keys => true)
-        begin
+      global_timeframe = parseOldFormat_timeframes(spec[:timeFrames])
+      timezone = spec[:timezone]
+      entity_name = spec[:entity]
+      load_entity = a_load.get_merged_entity_for(entity_name)
+      parser = Yajl::Parser.new(:symbolize_keys => true)
+      begin
           doc = parser.parse(spec[:readMap])
-	
-	  doc.map do |internal|
-	   fields = internal[:columns].map do |definition|
-	      if load_entity.has_field?(definition[:name])
-		load_entity.get_field(definition[:name])
-	      elsif definition[:name] == "DeletedAt"
-		Es::Field.new("DeletedAt", "time")
-	      elsif definition[:name] == "IsDeleted"
-		Es::Field.new("IsDeleted", "attribute")
-	      elsif definition[:name] == "snapshot"
-		Es::SnapshotField.new("snapshot", "snapshot")
-	      elsif definition[:name] == "autoincrement"
-		Es::AutoincrementField.new("generate", "autoincrement")
-	      elsif definition[:name] == "duration"
-		Es::DurationField.new("duration", "duration")
-	      elsif definition[:name] == "velocity"
-		Es::DurationField.new("velocity", "velocity")
-# 	      elsif field.respond_to?(:keys) && field.keys.first == :hid
-# 		Es::HIDField.new('hid', "historicid", {
-# 		  :entity => field[:hid][:from_entity],
-# 		  :fields => field[:hid][:from_fields],
-# 		  :through => field[:hid][:connected_through]
-# 		})
-	      else
-		fail Es::IncorrectSpecificationError.new("Field #{definition[:name]} has not been found in load definition")
-	      end
-	    end
-	    parsed_timeframe = parseOldFormat_timeframes(internal[:timeframes])
-	    entity = Entity.new(entity_name, {
-	      :fields => fields,
-	      :file   => internal[:file],
-	      :timeframe => parsed_timeframe || global_timeframe || (fail "Timeframe has to be defined"),
-	      :timezone => timezone
-	    })
-	   entity
-
-	  end
-# 	  pp doc
-	rescue Yajl::ParseError => e
-          fail Yajl::ParseError.new("Failed during parsing internal JSON. Error message: " + e.message)
+          doc.map do |internal|
+            fields = internal[:columns].map do |definition|
+              if load_entity.has_field?(definition[:name])
+                load_entity.get_field(definition[:name])
+              elsif definition[:name] == "DeletedAt"
+                Es::Field.new("DeletedAt", "time")
+              elsif definition[:name] == "IsDeleted"
+                Es::Field.new("IsDeleted", "attribute")
+              elsif definition[:name] == "snapshot"
+                Es::SnapshotField.new("snapshot", "snapshot")
+              elsif definition[:name] == "autoincrement"
+                Es::AutoincrementField.new("generate", "autoincrement")
+              elsif definition[:name] == "duration"
+                Es::DurationField.new("duration", "duration")
+              elsif definition[:name] == "velocity"
+                Es::DurationField.new("velocity", "velocity")
+              else
+                fail Es::IncorrectSpecificationError.new("Field #{definition[:name]} has not been found in load definition")
+              end
+            end
+            parsed_timeframe = parseOldFormat_timeframes(internal[:timeframes])
+            entity = Entity.new(entity_name, {
+                                              :fields => fields,
+                                              :file   => internal[:file],
+                                              :timeframe => parsed_timeframe || global_timeframe || (fail "Timeframe has to be defined"),
+                                              :timezone => timezone
+                                             })
+            entity
+          end
+      rescue Yajl::ParseError => e
+        fail Yajl::ParseError.new("Failed during parsing internal JSON. Error message: " + e.message)
         end
     end 
     
     
-    def self.parse_timeframes(timeframe_spec)
+    def self.parse_timeframes(timeframe_spec, options={})
       return nil if timeframe_spec.nil?
       if timeframe_spec.is_a?(Array) then
         timeframe_spec.map {|t_spec| Es::Timeframe.parse(t_spec, options)}
@@ -204,7 +194,7 @@ module Es
       return nil if timeframe_spec.nil?
       return Timeframe.parse("latest") if timeframe_spec == "latest"
       if timeframe_spec.is_a?(Array) then
- 	timeframe_spec.map {|t_spec|  Es::Timeframe.parseOldFormat(t_spec)}
+        timeframe_spec.map {|t_spec|  Es::Timeframe.parseOldFormat(t_spec)}
       else
         Es::Timeframe.parseOldFormat(timeframe_spec)
       end
@@ -240,7 +230,7 @@ module Es
     
     def self.parseOldFormat(spec)
       Load.new(spec.map do |entity_spec|
-	Entity.parseOldFormat(entity_spec[1])
+               Entity.parseOldFormat(entity_spec[1])
       end)
     end
 
@@ -272,16 +262,16 @@ module Es
     end
 
     def to_config
-      entities.map {|e| e.to_config}
+      entities.map {|e| e.to_load_config}
     end
     
     def to_config_generator
       entities.map do |e|
-	d = ActiveSupport::OrderedHash.new
-	d['entity'] = e.to_config_generator[:entity]
-	d['file'] = e.to_config_generator[:file]
-	d['filds'] = e.to_config_generator[:fields]
-	d
+        d = ActiveSupport::OrderedHash.new
+        d['entity'] = e.to_config_generator[:entity]
+        d['file'] = e.to_config_generator[:file]
+        d['filds'] = e.to_config_generator[:fields]
+        d
       end 
     end
 
@@ -293,7 +283,7 @@ module Es
     
     def to_config_generator_file(filename)
       File.open(filename, 'w') do |f|
-	f.write(JSON.pretty_generate(to_config_generator))
+        f.write(JSON.pretty_generate(to_config_generator))
       end
     end
    
@@ -417,12 +407,12 @@ module Es
         :fields => fields.map {|f| f.to_load_config}
       }
     end
-
-	    def to_config_generator
+    
+    def to_config_generator
       {
-	:entity => name,
-	:file => file,
-	:fields => fields.map {|f| f.to_config_generator}
+        :entity => name,
+        :file => file,
+        :fields => fields.map {|f| f.to_config_generator}
       }
     end
 
@@ -637,9 +627,9 @@ module Es
     
     def to_config_generator
      	d = ActiveSupport::OrderedHash.new
-	d['name'] = name
-	d['type'] = type
-	d
+        d['name'] = name
+        d['type'] = type
+        d
     end 
 
     def ==(other)
