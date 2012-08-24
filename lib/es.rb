@@ -87,6 +87,17 @@ module Es
         :interval           => interval
       }
     end
+    
+    
+    def to_config_generator_extract
+      {
+        :from                   => from.strftime('%Y-%m-%d'),
+        :to                     => to.strftime('%Y-%m-%d'),
+        :interval_unit          => interval_unit,
+        :interval               => day_within_period.to_s.upcase,
+        :day_within_period      => interval
+      }
+    end
 
   end
 
@@ -144,6 +155,7 @@ module Es
       entity_name = spec[:entity]
       load_entity = a_load.get_merged_entity_for(entity_name)
       parser = Yajl::Parser.new(:symbolize_keys => true)
+      i=0
       begin
           doc = parser.parse(spec[:readMap])
           doc.map do |internal|
@@ -154,7 +166,7 @@ module Es
                 Es::Field.new("DeletedAt", "time")
               elsif definition[:name] == "IsDeleted"
                 Es::Field.new("IsDeleted", "attribute")
-              elsif definition[:name] == "snapshot"
+              elsif definition[:name] == "snapshot" || definition[:definition][:type] == "snapshot"
                 Es::SnapshotField.new("snapshot", "snapshot")
               elsif definition[:name] == "autoincrement"
                 Es::AutoincrementField.new("generate", "autoincrement")
@@ -162,9 +174,14 @@ module Es
                 Es::DurationField.new("duration", "duration")
               elsif definition[:name] == "velocity"
                 Es::DurationField.new("velocity", "velocity")
+              elsif definition[:definition][:type] == "historicid"
+                Es::HIDField.new('hid', "historicid",Es::Helpers.get_historyid_settings(definition[:definition][:ops]))
+              elsif definition[:name].downcase == "iswon" || definition[:name].downcase == "isclosed" || definition[:name].downcase == "stagename" || definition[:name].downcase == "daytoclose" || definition[:name] == "dayssincelastactivity"
+                Es::Field.new(definition[:name], "attribute")  
               else
-                fail Es::IncorrectSpecificationError.new("Field #{definition[:name]} has not been found in load definition")
-              end
+                puts "WARNING! Transformer has found out field #{definition[:name]} which is not in load script, puting to extract as attribute"
+                Es::Field.new("#{definition[:name]}", "attribute") 
+              end     
             end
             parsed_timeframe = parseOldFormat_timeframes(internal[:timeframes])
             entity = Entity.new(entity_name, {
@@ -269,8 +286,8 @@ module Es
       entities.map do |e|
         d = ActiveSupport::OrderedHash.new
         d['entity'] = e.to_config_generator[:entity]
-        d['file'] = e.to_config_generator[:file]
-        d['filds'] = e.to_config_generator[:fields]
+        d['file'] = "data/estore-in/#{e.to_config_generator[:file].match(/[^\/]*.csv/)[0]}"
+        d['fields'] = e.to_config_generator[:fields]
         d
       end 
     end
@@ -280,14 +297,6 @@ module Es
         f.write(JSON.pretty_generate(to_config))
       end
     end
-    
-    def to_config_generator_file(filename)
-      File.open(filename, 'w') do |f|
-        f.write(JSON.pretty_generate(to_config_generator))
-      end
-    end
-   
-    
 
   end
 
@@ -379,13 +388,13 @@ module Es
     def to_extract_configuration
       d = ActiveSupport::OrderedHash.new
       d['entity'] = name
-      d['file'] = file
+      d['file'] = "data/estore-out/#{file.match(/[^\/]*.csv/)[0]}"
       d['fields'] =  (fields.map do |field|
-			    field.name
+			    field.to_config_generator_extract
                           end)
-      
+      d['timeframes'] = (timeframes.map{|t| t.to_config_generator_extract})
       final = ActiveSupport::OrderedHash.new
-      final['entities'] = d
+      final['entities'] = [ d ]
       final
     end
     
@@ -538,8 +547,9 @@ module Es
     DURATION_TYPE       = "duration"
     VELOCITY_TYPE       = "velocity"
     IS_DELETED_TYPE     = "isDeleted"
+    TIMEATTRIBUTE_TYPE  = "timeAttribute"
 
-    FIELD_TYPES = [ATTRIBUTE_TYPE, RECORDID_TYPE, DATE_TYPE, TIME_TYPE, FACT_TYPE, TIMESTAMP_TYPE, AUTOINCREMENT_TYPE, SNAPSHOT_TYPE, HID_TYPE, HISTORIC_TYPE, DURATION_TYPE, VELOCITY_TYPE, IS_DELETED_TYPE]
+    FIELD_TYPES = [ATTRIBUTE_TYPE, RECORDID_TYPE, DATE_TYPE, TIME_TYPE, FACT_TYPE, TIMESTAMP_TYPE, AUTOINCREMENT_TYPE, SNAPSHOT_TYPE, HID_TYPE, HISTORIC_TYPE, DURATION_TYPE, VELOCITY_TYPE, IS_DELETED_TYPE,TIMEATTRIBUTE_TYPE]
 
     def self.parse(spec)
       fail InsufficientSpecificationError.new("Field specification is empty") if spec.nil?
@@ -628,8 +638,13 @@ module Es
     def to_config_generator
      	d = ActiveSupport::OrderedHash.new
         d['name'] = name
-        d['type'] = type
+        d['type'] = Es::Helpers.type_to_generator_load_type(type)
         d
+    end 
+    
+    
+    def to_config_generator_extract
+          name
     end 
 
     def ==(other)
@@ -697,6 +712,30 @@ module Es
         }
       }
     end
+    
+    
+    def to_config_generator_extract
+      if through.empty? then
+        {
+          :hid => 
+              {
+                    :from_entity => entity,
+                    :from_fields => fields.map{|f| f}
+              }
+        }
+      else
+        {
+          :hid => 
+              {
+                    :from_entity => entity,
+                    :from_fields => fields.map{|f| f},
+                    :connected_through => through
+              }
+        
+      }
+      end
+    end 
+    
 
   end
 
@@ -854,7 +893,8 @@ module Es
         Es::Field::FACT_TYPE            => "fact",
         Es::Field::TIME_TYPE            => "timeAttribute",
         Es::Field::DATE_TYPE            => "timeAttribute",
-        Es::Field::IS_DELETED_TYPE      => 'isDeleted'
+        Es::Field::IS_DELETED_TYPE      => "isDeleted",
+        Es::Field::TIMEATTRIBUTE_TYPE   => "timeAttribute"
       }
       if types.has_key?(type) then
         types[type]
@@ -871,8 +911,8 @@ module Es
         Es::Field::FACT_TYPE            => "stream",
         Es::Field::SNAPSHOT_TYPE        => "snapshot",
         Es::Field::TIME_TYPE            => "stream",
-        Es::Field::DATE_TYPE            => "stream"
-        
+        Es::Field::DATE_TYPE            => "stream",
+        Es::Field::TIMEATTRIBUTE_TYPE   => "stream"
       }
       if types.has_key?(type) then
         types[type]
@@ -888,7 +928,8 @@ module Es
         Es::Field::FACT_TYPE          => "number",
         Es::Field::SNAPSHOT_TYPE      => "snapshot",
         Es::Field::TIME_TYPE          => "key",
-        Es::Field::DATE_TYPE          => "date"
+        Es::Field::DATE_TYPE          => "date",
+        Es::Field::TIMEATTRIBUTE_TYPE => "key"
       }
       if types.has_key?(type) then
         types[type]
@@ -896,6 +937,48 @@ module Es
         fail "Type #{type} not found."
       end
     end
+    
+    def self.type_to_generator_load_type(type)
+      types = {
+        Es::Field::RECORDID_TYPE        => "recordid",
+        Es::Field::TIMESTAMP_TYPE       => "timestamp",
+        Es::Field::ATTRIBUTE_TYPE       => "attribute",
+        Es::Field::FACT_TYPE            => "fact",
+        Es::Field::TIME_TYPE            => "time",
+        Es::Field::DATE_TYPE            => "date",
+        Es::Field::IS_DELETED_TYPE      => "isDeleted",
+        Es::Field::TIMEATTRIBUTE_TYPE   => "time"
+      }
+      if types.has_key?(type) then
+        types[type]
+      else
+        fail "Type #{type} not found."
+      end
+    end
+    
+    
+    def self.get_historyid_settings(json)
+        entity_fields =  Array.new
+        entity_name = ""
+        connected_through = ""
+        json.map do |inner_part|
+            if (inner_part[:type] == "entity") 
+                entity_name = inner_part[:data]
+                inner_part[:ops].map do |fields|
+                    entity_fields << fields[:data]
+                end
+            elsif (inner_part[:type] == "stream") 
+              connected_through = inner_part[:data]
+            end 
+        end
+        {
+            :entity => entity_name,
+            :fields => entity_fields,
+            :through => connected_through
+        }
+    end 
+    
+
   end
 
 end
