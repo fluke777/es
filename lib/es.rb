@@ -37,8 +37,25 @@ module Es
         Timeframe.new(spec, options)
       end
     end
-
-    def initialize(spec, options={})
+        
+    def self.parseOldFormat(spec, options={})
+      if spec == 'latest' then
+        Timeframe.new({
+          :to => 'today',
+          :from => 'yesterday'
+        })
+      else
+        Timeframe.new({
+                       :to => spec[:endDate],
+                       :from => spec[:startDate],
+                       :interval_unit => spec[:intervalUnit],
+                       :interval => spec[:interval],
+                       :day_within_period => spec[:dayWithinPeriod].downcase
+                      })
+      end
+    end
+    
+    def initialize(spec,options = {})
       validate_spec(spec)
       @now = options[:now] || Time.now
       @spec = spec
@@ -68,6 +85,17 @@ module Es
         :intervalUnit       => interval_unit,
         :dayWithinPeriod    => day_within_period.to_s.upcase,
         :interval           => interval
+      }
+    end
+    
+    
+    def to_config_generator_extract
+      {
+        :from                   => from.strftime('%Y-%m-%d'),
+        :to                     => to.strftime('%Y-%m-%d'),
+        :interval_unit          => interval_unit,
+        :interval               => day_within_period.to_s.upcase,
+        :day_within_period      => interval
       }
     end
 
@@ -120,6 +148,56 @@ module Es
       Extract.new(parsed_entities)
     end
 
+    
+    def self.parseOldFormat(spec,a_load)
+      global_timeframe = parseOldFormat_timeframes(spec[:timeFrames])
+      timezone = spec[:timezone]
+      entity_name = spec[:entity]
+      load_entity = a_load.get_merged_entity_for(entity_name)
+      parser = Yajl::Parser.new(:symbolize_keys => true)
+      i=0
+      begin
+          doc = parser.parse(spec[:readMap])
+          doc.map do |internal|
+            fields = internal[:columns].map do |definition|
+              if load_entity.has_field?(definition[:name])
+                load_entity.get_field(definition[:name])
+              elsif definition[:name] == "DeletedAt"
+                Es::Field.new("DeletedAt", "time")
+              elsif definition[:name] == "IsDeleted"
+                Es::Field.new("IsDeleted", "attribute")
+              elsif definition[:name] == "snapshot" || definition[:definition][:type] == "snapshot"
+                Es::SnapshotField.new("snapshot", "snapshot")
+              elsif definition[:name] == "autoincrement"
+                Es::AutoincrementField.new("generate", "autoincrement")
+              elsif definition[:name] == "duration"
+                Es::DurationField.new("duration", "duration")
+              elsif definition[:name] == "velocity"
+                Es::DurationField.new("velocity", "velocity")
+              elsif definition[:definition][:type] == "historicid"
+                Es::HIDField.new('hid', "historicid",Es::Helpers.get_historyid_settings(definition[:definition][:ops]))
+              elsif definition[:name].downcase == "iswon" || definition[:name].downcase == "isclosed" || definition[:name].downcase == "stagename" || definition[:name].downcase == "daytoclose" || definition[:name] == "dayssincelastactivity"
+                Es::Field.new(definition[:name], "attribute")  
+              else
+                puts "WARNING! Transformer has found out field #{definition[:name]} which is not in load script, puting to extract as attribute"
+                Es::Field.new("#{definition[:name]}", "attribute") 
+              end     
+            end
+            parsed_timeframe = parseOldFormat_timeframes(internal[:timeframes])
+            entity = Entity.new(entity_name, {
+                                              :fields => fields,
+                                              :file   => internal[:file],
+                                              :timeframe => parsed_timeframe || global_timeframe || (fail "Timeframe has to be defined"),
+                                              :timezone => timezone
+                                             })
+            entity
+          end
+      rescue Yajl::ParseError => e
+        fail Yajl::ParseError.new("Failed during parsing internal JSON. Error message: " + e.message)
+        end
+    end 
+    
+    
     def self.parse_timeframes(timeframe_spec, options={})
       return nil if timeframe_spec.nil?
       if timeframe_spec.is_a?(Array) then
@@ -128,6 +206,17 @@ module Es
         Es::Timeframe.parse(timeframe_spec, options)
       end
     end
+    
+    def self.parseOldFormat_timeframes(timeframe_spec)
+      return nil if timeframe_spec.nil?
+      return Timeframe.parse("latest") if timeframe_spec == "latest"
+      if timeframe_spec.is_a?(Array) then
+        timeframe_spec.map {|t_spec|  Es::Timeframe.parseOldFormat(t_spec)}
+      else
+        Es::Timeframe.parseOldFormat(timeframe_spec)
+      end
+    end
+    
 
     def initialize(entities, options = {})
       @entities = entities
@@ -153,6 +242,12 @@ module Es
     def self.parse(spec)
       Load.new(spec.map do |entity_spec|
         Entity.parse(entity_spec)
+      end)
+    end
+    
+    def self.parseOldFormat(spec)
+      Load.new(spec.map do |entity_spec|
+               Entity.parseOldFormat(entity_spec[1])
       end)
     end
 
@@ -185,6 +280,16 @@ module Es
 
     def to_config
       entities.map {|e| e.to_load_config}
+    end
+    
+    def to_config_generator
+      entities.map do |e|
+        d = ActiveSupport::OrderedHash.new
+        d['entity'] = e.to_config_generator[:entity]
+        d['file'] = "data/estore-in/#{e.to_config_generator[:file].match(/[^\/]*.csv/)[0]}"
+        d['fields'] = e.to_config_generator[:fields]
+        d
+      end 
     end
 
     def to_config_file(filename)
@@ -219,6 +324,14 @@ module Es
         :fields => spec[:fields] && spec[:fields].map {|field_spec| Field.parse(field_spec)}
       })
     end
+    
+    def self.parseOldFormat(spec)
+       entity = Entity.new(spec[:entity], {
+         :file => spec[:file],
+         :fields => spec[:attributes] && spec[:attributes].map {|field_spec| Field.parse(field_spec)}
+       })
+    end
+    
 
     def initialize(name, options)
       fail Es::IncorrectSpecificationError.new("Entity name is not specified.") if name.nil?
@@ -271,6 +384,20 @@ module Es
       task
 
     end
+    
+    def to_extract_configuration
+      d = ActiveSupport::OrderedHash.new
+      d['entity'] = name
+      d['file'] = "data/estore-out/#{file.match(/[^\/]*.csv/)[0]}"
+      d['fields'] =  (fields.map do |field|
+			    field.to_config_generator_extract
+                          end)
+      d['timeframes'] = (timeframes.map{|t| t.to_config_generator_extract})
+      final = ActiveSupport::OrderedHash.new
+      final['entities'] = [ d ]
+      final
+    end
+    
 
     def to_load_fragment(pid)
       {
@@ -289,6 +416,15 @@ module Es
         :fields => fields.map {|f| f.to_load_config}
       }
     end
+    
+    def to_config_generator
+      {
+        :entity => name,
+        :file => file,
+        :fields => fields.map {|f| f.to_config_generator}
+      }
+    end
+
 
     def to_extract_config
       {
@@ -411,8 +547,9 @@ module Es
     DURATION_TYPE       = "duration"
     VELOCITY_TYPE       = "velocity"
     IS_DELETED_TYPE     = "isDeleted"
+    TIMEATTRIBUTE_TYPE  = "timeAttribute"
 
-    FIELD_TYPES = [ATTRIBUTE_TYPE, RECORDID_TYPE, DATE_TYPE, TIME_TYPE, FACT_TYPE, TIMESTAMP_TYPE, AUTOINCREMENT_TYPE, SNAPSHOT_TYPE, HID_TYPE, HISTORIC_TYPE, DURATION_TYPE, VELOCITY_TYPE, IS_DELETED_TYPE]
+    FIELD_TYPES = [ATTRIBUTE_TYPE, RECORDID_TYPE, DATE_TYPE, TIME_TYPE, FACT_TYPE, TIMESTAMP_TYPE, AUTOINCREMENT_TYPE, SNAPSHOT_TYPE, HID_TYPE, HISTORIC_TYPE, DURATION_TYPE, VELOCITY_TYPE, IS_DELETED_TYPE,TIMEATTRIBUTE_TYPE]
 
     def self.parse(spec)
       fail InsufficientSpecificationError.new("Field specification is empty") if spec.nil?
@@ -497,6 +634,18 @@ module Es
         :type => (type == 'none' ? '' : type)
       }
     end
+    
+    def to_config_generator
+     	d = ActiveSupport::OrderedHash.new
+        d['name'] = name
+        d['type'] = Es::Helpers.type_to_generator_load_type(type)
+        d
+    end 
+    
+    
+    def to_config_generator_extract
+          name
+    end 
 
     def ==(other)
       other.name == name
@@ -563,6 +712,30 @@ module Es
         }
       }
     end
+    
+    
+    def to_config_generator_extract
+      if through.empty? then
+        {
+          :hid => 
+              {
+                    :from_entity => entity,
+                    :from_fields => fields.map{|f| f}
+              }
+        }
+      else
+        {
+          :hid => 
+              {
+                    :from_entity => entity,
+                    :from_fields => fields.map{|f| f},
+                    :connected_through => through
+              }
+        
+      }
+      end
+    end 
+    
 
   end
 
@@ -720,7 +893,8 @@ module Es
         Es::Field::FACT_TYPE            => "fact",
         Es::Field::TIME_TYPE            => "timeAttribute",
         Es::Field::DATE_TYPE            => "timeAttribute",
-        Es::Field::IS_DELETED_TYPE      => 'isDeleted'
+        Es::Field::IS_DELETED_TYPE      => "isDeleted",
+        Es::Field::TIMEATTRIBUTE_TYPE   => "timeAttribute"
       }
       if types.has_key?(type) then
         types[type]
@@ -737,8 +911,8 @@ module Es
         Es::Field::FACT_TYPE            => "stream",
         Es::Field::SNAPSHOT_TYPE        => "snapshot",
         Es::Field::TIME_TYPE            => "stream",
-        Es::Field::DATE_TYPE            => "stream"
-        
+        Es::Field::DATE_TYPE            => "stream",
+        Es::Field::TIMEATTRIBUTE_TYPE   => "stream"
       }
       if types.has_key?(type) then
         types[type]
@@ -754,7 +928,8 @@ module Es
         Es::Field::FACT_TYPE          => "number",
         Es::Field::SNAPSHOT_TYPE      => "snapshot",
         Es::Field::TIME_TYPE          => "key",
-        Es::Field::DATE_TYPE          => "date"
+        Es::Field::DATE_TYPE          => "date",
+        Es::Field::TIMEATTRIBUTE_TYPE => "key"
       }
       if types.has_key?(type) then
         types[type]
@@ -762,6 +937,48 @@ module Es
         fail "Type #{type} not found."
       end
     end
+    
+    def self.type_to_generator_load_type(type)
+      types = {
+        Es::Field::RECORDID_TYPE        => "recordid",
+        Es::Field::TIMESTAMP_TYPE       => "timestamp",
+        Es::Field::ATTRIBUTE_TYPE       => "attribute",
+        Es::Field::FACT_TYPE            => "fact",
+        Es::Field::TIME_TYPE            => "time",
+        Es::Field::DATE_TYPE            => "date",
+        Es::Field::IS_DELETED_TYPE      => "isDeleted",
+        Es::Field::TIMEATTRIBUTE_TYPE   => "time"
+      }
+      if types.has_key?(type) then
+        types[type]
+      else
+        fail "Type #{type} not found."
+      end
+    end
+    
+    
+    def self.get_historyid_settings(json)
+        entity_fields =  Array.new
+        entity_name = ""
+        connected_through = ""
+        json.map do |inner_part|
+            if (inner_part[:type] == "entity") 
+                entity_name = inner_part[:data]
+                inner_part[:ops].map do |fields|
+                    entity_fields << fields[:data]
+                end
+            elsif (inner_part[:type] == "stream") 
+              connected_through = inner_part[:data]
+            end 
+        end
+        {
+            :entity => entity_name,
+            :fields => entity_fields,
+            :through => connected_through
+        }
+    end 
+    
+
   end
 
 end
