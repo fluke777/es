@@ -113,7 +113,11 @@ module Es
         load_entity = a_load.get_merged_entity_for(entity_name)
         fields = entity_spec[:fields].map do |field|
           if load_entity.has_field?(field)
-            load_entity.get_field(field)
+            if (load_entity.get_field(field).is_recordid?)
+              Es::RecordIdField.new(load_entity.get_field(field).name, load_entity.get_field(field).type)
+            else
+              load_entity.get_field(field)
+            end
           elsif field == "DeletedAt"
             Es::Field.new("DeletedAt", "time")
           elsif field == "IsDeleted"
@@ -367,7 +371,7 @@ module Es
         :file       => Es::Helpers.web_dav_extract_destination_dir(pid, self) + '/' + Es::Helpers.destination_file(self),
         :populates  => populates_element.name,
         :columns    => (fields.map do |field|
-          field.to_extract_fragment(pid, options)
+          field.to_extract_fragment(pid, fields, options)
         end)
       }]
 
@@ -485,9 +489,9 @@ module Es
         data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/readTasks", to_extract_fragment(pid, :pretty => false).to_json
         link = data["asyncTask"]["link"]["poll"]
         response = GoodData.get(link, :process => false)
-        while response.code != 204
-          GoodData.connection.retryable(:tries => 3, :on => RestClient::InternalServerError) do
-            sleep 5
+        if response.code != 204 then 
+          GoodData.connection.retryable(:tries => 3, :on => RestClient::InternalServerError) do  
+          sleep 5
             response = GoodData.get(link, :process => false)
           end
           response = GoodData.get(link, :process => false)
@@ -607,7 +611,7 @@ module Es
       @type = type
     end
 
-    def to_extract_fragment(pid, options = {})
+    def to_extract_fragment(pid,fields, options = {})
       {
         :name => name,
         :preferred => name,
@@ -653,6 +657,37 @@ module Es
 
   end
 
+  class RecordIdField < Field
+
+    attr_accessor :type, :name
+
+    def is_recordid?
+      true
+    end
+
+    def to_extract_fragment(pid, fields, options = {})
+      {
+        :name => name,
+        :preferred => name,
+        :definition => {
+          :ops => [{
+            :type => Es::Helpers.type_to_type(type),
+            :data => name,
+            :ops => fields.select{|x| Es::Helpers.type_to_type(x.type) == "stream"}.map do |f|
+                      {
+                        :type => "stream",
+                        :data => f.name
+                      }
+              end
+          }],
+          :type => Es::Helpers.type_to_operation(type)
+        }
+      }
+    end
+
+  end
+
+
   class SnapshotField < Field
 
     attr_accessor :type, :name
@@ -661,7 +696,7 @@ module Es
       true
     end
 
-    def to_extract_fragment(pid, options = {})
+    def to_extract_fragment(pid, fields, options = {})
       {
         :name => name,
         :preferred => name,
@@ -690,7 +725,7 @@ module Es
       @through = options[:through]
     end
 
-    def to_extract_fragment(pid, options = {})
+    def to_extract_fragment(pid, fields, options = {})
       {
         :name => name,
         :preferred => name,
@@ -747,7 +782,7 @@ module Es
       true
     end
 
-    def to_extract_fragment(pid, options = {})
+    def to_extract_fragment(pid, fields, options = {})
       {
           :name       => "StageDuration",
           :preferred  => "stageduration",
@@ -798,7 +833,7 @@ module Es
       true
     end
 
-    def to_extract_fragment(pid, options = {})
+    def to_extract_fragment(pid, fields, options = {})
       {
         :name => "StageVelocity",
         :preferred => "stagevelocity",
@@ -822,7 +857,7 @@ module Es
       true
     end
 
-    def to_extract_fragment(pid, options = {})
+    def to_extract_fragment(pid, fields, options = {})
       {
         :name => name,
         :preferred => name,
