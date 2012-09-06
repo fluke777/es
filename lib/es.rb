@@ -490,9 +490,9 @@ module Es
         data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/readTasks", to_extract_fragment(pid, {:pretty => false}).to_json
         link = data["asyncTask"]["link"]["poll"]
         response = GoodData.get(link, :process => false)
-        while response.code != 204 do
-          GoodData.connection.retryable(:tries => 3, :on => RestClient::InternalServerError) do  
-          sleep 5
+        while response.code != 204
+          GoodData.connection.retryable(:tries => 3, :on => RestClient::InternalServerError) do
+            sleep 5
             response = GoodData.get(link, :process => false)
           end
           response = GoodData.get(link, :process => false)
