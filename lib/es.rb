@@ -111,7 +111,6 @@ module Es
       parsed_entities = spec[:entities].map do |entity_spec|
         entity_name = entity_spec[:entity]
         partial = entity_spec[:partial] || "false"
-        pp partial
         load_entity = a_load.get_merged_entity_for(entity_name)
         fields = entity_spec[:fields].map do |field|
           if load_entity.has_field?(field)
