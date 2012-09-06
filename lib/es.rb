@@ -103,18 +103,20 @@ module Es
 
   class Extract
 
-    attr_accessor :entities, :timeframe, :timezone
+    attr_accessor :entities, :timeframe, :timezone, :partial
 
     def self.parse(spec, a_load, options={})
       global_timeframe = parse_timeframes(spec[:timeframes], options) || parse_timeframes("latest", options)
       timezone = spec[:timezone]
       parsed_entities = spec[:entities].map do |entity_spec|
         entity_name = entity_spec[:entity]
+        partial = entity_spec[:partial] || "false"
+        pp partial
         load_entity = a_load.get_merged_entity_for(entity_name)
         fields = entity_spec[:fields].map do |field|
           if load_entity.has_field?(field)
             if (load_entity.get_field(field).is_recordid?)
-              Es::RecordIdField.new(load_entity.get_field(field).name, load_entity.get_field(field).type)
+              Es::RecordIdField.new(load_entity.get_field(field).name, load_entity.get_field(field).type, partial)
             else
               load_entity.get_field(field)
             end
@@ -486,7 +488,7 @@ module Es
 
     def extract(pid, es_name)
       begin
-        data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/readTasks", to_extract_fragment(pid, :pretty => false).to_json
+        data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/readTasks", to_extract_fragment(pid, {:pretty => false}).to_json
         link = data["asyncTask"]["link"]["poll"]
         response = GoodData.get(link, :process => false)
         if response.code != 204 then 
@@ -659,14 +661,24 @@ module Es
 
   class RecordIdField < Field
 
-    attr_accessor :type, :name
-
+    attr_accessor :type, :name, :partial
+    
+    def initialize(name, type, partial)
+      fail Es::IncorrectSpecificationError.new("The field name \"#{name.bright}\" does not have type specified. Type should be one of [#{FIELD_TYPES.join(', ')}]") if type.nil?
+      fail Es::IncorrectSpecificationError.new("The type of field name \"#{name.bright}\" should be a string.") unless type.is_a?(String)
+      fail Es::IncorrectSpecificationError.new("The field name \"#{name.bright}\" does have wrong type specified. Specified \"#{type.bright}\" should be one of [#{FIELD_TYPES.join(', ')}]") unless FIELD_TYPES.include?(type) || type == "none"
+      @name = name
+      @type = type
+      @partial = partial
+    end
+    
     def is_recordid?
       true
     end
 
     def to_extract_fragment(pid, fields, options = {})
-      {
+      if (partial == "true") then
+       {
         :name => name,
         :preferred => name,
         :definition => {
@@ -682,9 +694,21 @@ module Es
           }],
           :type => Es::Helpers.type_to_operation(type)
         }
+      } 
+      else 
+      {
+        :name => name,
+        :preferred => name,
+        :definition => {
+          :ops => [{
+            :type => Es::Helpers.type_to_type(type),
+            :data => name
+          }],
+          :type => Es::Helpers.type_to_operation(type)
+        }
       }
+      end
     end
-
   end
 
 
