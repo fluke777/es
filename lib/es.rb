@@ -486,7 +486,7 @@ module Es
     end
 
     def extract(pid, es_name)
-      begin
+    begin
         data = GoodData.post "/gdc/projects/#{pid}/eventStore/stores/#{es_name}/readTasks", to_extract_fragment(pid, {:pretty => false}).to_json
         link = data["asyncTask"]["link"]["poll"]
         response = GoodData.get(link, :process => false)
@@ -676,8 +676,7 @@ module Es
     end
 
     def to_extract_fragment(pid, fields, options = {})
-      if ("false" == "true") then
-      #       if (partial == "true") then
+    if (partial == "true") then
        {
         :name => name,
         :preferred => name,
@@ -735,7 +734,7 @@ module Es
 
   class HIDField < Field
 
-    attr_accessor :type, :name, :entity, :fields, :through
+    attr_accessor :type, :name, :entity, :fieldsInner, :through
 
     def is_hid?
       true
@@ -745,7 +744,7 @@ module Es
       name = "#{name}-#{options[:entity]}"
       super(name, type)
       @entity = options[:entity] || fail("Entity has to be scpecified for a HID Field")
-      @fields = options[:fields] || fail("Fields has to be scpecified for a HID Field")
+      @fieldsInner = options[:fields] || fail("Fields has to be scpecified for a HID Field")
       @through = options[:through]
     end
 
@@ -759,7 +758,7 @@ module Es
             {
               :type => "entity",
               :data => entity,
-              :ops  => fields.map do |f|
+              :ops  => fieldsInner.map do |f|
                 {
                   :type => "stream",
                   :data => f
