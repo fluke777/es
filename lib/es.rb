@@ -676,7 +676,8 @@ module Es
     end
 
     def to_extract_fragment(pid, fields, options = {})
-      if (partial == "true") then
+      if ("false" == "true") then
+      #       if (partial == "true") then
        {
         :name => name,
         :preferred => name,
