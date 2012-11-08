@@ -127,22 +127,22 @@ module Es
             Es::SnapshotField.new("snapshot", "snapshot")
           elsif field == "autoincrement"
             Es::AutoincrementField.new("generate", "autoincrement")
-          elsif field == "duration" || (field.respond_to?(:keys) && field.keys.first == :Duration )
+          elsif field == "duration" || (field.respond_to?(:keys) && field.keys.first == :duration )
             if (field == "duration") then
               Es::DurationField.new("duration", "duration")
             else 
               Es::DurationField.new("duration", "duration",{
-                  :attribute =>         field[:Duration][:attribute],
-                  :value =>             field[:Duration][:value],
-                  :control_attribute => field[:Duration][:name]
+                  :attribute =>         field[:duration][:attribute],
+                  :value =>             field[:duration][:value],
+                  :control_attribute => field[:duration][:name]
                 })
             end
-          elsif field == "velocity" || (field.respond_to?(:keys) && field.keys.first == :Velocity )
+          elsif field == "velocity" || (field.respond_to?(:keys) && field.keys.first == :velocity )
             if (field == "velocity") then
               Es::VelocityField.new("velocity", "velocity")
             else
               Es::VelocityField.new("velocity", "velocity",{
-                  :control_attribute => field[:Velocity][:name]
+                  :control_attribute => field[:velocity][:name]
                 })
             end
           elsif field.respond_to?(:keys) && field.keys.first == :hid
