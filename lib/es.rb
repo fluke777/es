@@ -815,7 +815,7 @@ module Es
 
     attr_accessor :type, :name, :attribute, :value, :control_attribute
     
-    def initialize(name, type, options)
+    def initialize(name, type, options = {})
       super(name, type)
       @attribute = options[:attribute] || "IsClosed"
       @value =  options[:value]        || "false"
@@ -873,7 +873,7 @@ module Es
 
     attr_accessor :type, :name, :control_attribute
     
-    def initialize(name, type, options)
+    def initialize(name, type, options = {})
       super(name, type)
       @control_attribute = options[:control_attribute] || "StageName"
     end
