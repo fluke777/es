@@ -157,7 +157,7 @@ command :extract do |c|
   c.switch [:v, :verbose]
   
   c.desc 'Print the task in the ugly oneliner mode for use in legacy tools. Does not run the actual extract.'
-  c.default_value false
+  c.default_value true
   c.switch [:j, :json]
   
   c.desc 'Run as usual but output the task definition in pretty print for debugging.'
@@ -192,6 +192,7 @@ command :extract do |c|
     end
 
     options[:now] = business_date
+
     Es::Commands::extract(options)
   end
 end

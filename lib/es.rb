@@ -127,10 +127,24 @@ module Es
             Es::SnapshotField.new("snapshot", "snapshot")
           elsif field == "autoincrement"
             Es::AutoincrementField.new("generate", "autoincrement")
-          elsif field == "duration"
-            Es::DurationField.new("duration", "duration")
-          elsif field == "velocity"
-            Es::VelocityField.new("velocity", "velocity")
+          elsif field == "duration" || (field.respond_to?(:keys) && field.keys.first == :Duration )
+            if (field == "duration") then
+              Es::DurationField.new("duration", "duration")
+            else 
+              Es::DurationField.new("duration", "duration",{
+                  :attribute =>         field[:Duration][:attribute],
+                  :value =>             field[:Duration][:value],
+                  :control_attribute => field[:Duration][:name]
+                })
+            end
+          elsif field == "velocity" || (field.respond_to?(:keys) && field.keys.first == :Velocity )
+            if (field == "velocity") then
+              Es::VelocityField.new("velocity", "velocity")
+            else
+              Es::VelocityField.new("velocity", "velocity",{
+                  :control_attribute => field[:Velocity][:name]
+                })
+            end
           elsif field.respond_to?(:keys) && field.keys.first == :hid
             Es::HIDField.new('hid', "historicid", {
               :entity => field[:hid][:from_entity],
@@ -799,8 +813,15 @@ module Es
 
   class DurationField < Field
 
-    attr_accessor :type, :name
-
+    attr_accessor :type, :name, :attribute, :value, :control_attribute
+    
+    def initialize(name, type, options)
+      super(name, type)
+      @attribute = options[:attribute] || "IsClosed"
+      @value =  options[:value]        || "false"
+      @control_attribute = options[:control_attribute] || "StageName"
+    end
+    
     def is_duration?
       true
     end
@@ -817,18 +838,18 @@ module Es
                       :type => "=",
                       :ops => [{
                           :type => "stream",
-                          :data => "IsClosed"
+                          :data => attribute
                       },
                       {
                           :type => "match",
-                          :data => "false"
+                          :data => value
                       }]
                   },
                   {
                       :type => "duration",
                       :ops  => [{
                           :type => "stream",
-                          :data => "StageName"
+                          :data => control_attribute
                       }]
                   }]
               },
@@ -850,8 +871,13 @@ module Es
 
   class VelocityField < Field
 
-    attr_accessor :type, :name
-
+    attr_accessor :type, :name, :control_attribute
+    
+    def initialize(name, type, options)
+      super(name, type)
+      @control_attribute = options[:control_attribute] || "StageName"
+    end
+    
     def is_velocity?
       true
     end
@@ -864,7 +890,7 @@ module Es
             :type => "velocity",
             :ops => [{
                 :type => "stream",
-                :data => "StageName"
+                :data => control_attribute
             }]
         }
       }
