@@ -3,13 +3,13 @@ $:.push File.expand_path("../lib", __FILE__)
 require "es_version"
 
 spec = Gem::Specification.new do |s| 
-  s.name = 'es'
+  s.name = 'gd_es'
   s.version = Es::VERSION
-  s.author = 'Your Name Here'
-  s.email = 'your@email.address.com'
-  s.homepage = 'http://your.website.com'
+  s.author = 'Tomas Svarovsky'
+  s.email = 'svarovsky.tomas@gmail.com'
+  s.homepage = 'http://svarovsky-tomas.com'
   s.platform = Gem::Platform::RUBY
-  s.summary = 'A description of your project'
+  s.summary = 'Project which simplifies interaction with GoodData Eventstore storage'
 # Add your other files here if you make them
   s.files = ['bin/es'] + Dir['lib/**/*.*']
   s.require_paths << 'lib'
