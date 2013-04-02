@@ -7,7 +7,7 @@ spec = Gem::Specification.new do |s|
   s.version = Es::VERSION
   s.author = 'Tomas Svarovsky'
   s.email = 'svarovsky.tomas@gmail.com'
-  s.homepage = 'http://svarovsky-tomas.com'
+  s.homepage = 'https://github.com/fluke777/es'
   s.platform = Gem::Platform::RUBY
   s.summary = 'Project which simplifies interaction with GoodData Eventstore storage'
 # Add your other files here if you make them
